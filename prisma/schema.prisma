@@ -1,0 +1,208 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+
+  //provider = "prisma-client"
+  //output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+//////////////////////////////
+// ENUMS
+//////////////////////////////
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  DISPATCHED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+}
+
+//////////////////////////////
+// CORE USERS
+//////////////////////////////
+
+model BrandOwner {
+  id          String   @id @default(uuid())
+  brandName   String
+  email       String   @unique
+  password    String
+  phone       String?
+  logoUrl     String?
+  address     String?
+  isActive    Boolean  @default(true)
+
+  products    Product[]
+  shopLinks   BrandOwnerShop[]
+  orders      Order[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([email])
+}
+
+model ShopOwner {
+  id          String   @id @default(uuid())
+  shopName    String
+  ownerName   String
+  phone       String
+  email       String?
+  address     String?
+  shopSlug    String   @unique
+  qrCodeUrl   String?
+  isActive    Boolean  @default(true)
+
+  brandLinks  BrandOwnerShop[]
+  orders      Order[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([shopSlug])
+}
+
+//////////////////////////////
+// MANY TO MANY RELATION
+//////////////////////////////
+
+model BrandOwnerShop {
+  id            String      @id @default(uuid())
+  brandOwnerId  String
+  shopOwnerId   String
+
+  brandOwner    BrandOwner  @relation(fields: [brandOwnerId], references: [id], onDelete: Cascade)
+  shopOwner     ShopOwner   @relation(fields: [shopOwnerId], references: [id], onDelete: Cascade)
+
+  isActive      Boolean     @default(true)
+
+  createdAt     DateTime    @default(now())
+
+  @@unique([brandOwnerId, shopOwnerId])
+  @@index([brandOwnerId])
+  @@index([shopOwnerId])
+}
+
+//////////////////////////////
+// PRODUCTS
+//////////////////////////////
+
+model Product {
+  id            String   @id @default(uuid())
+  brandOwnerId  String
+  brandOwner    BrandOwner @relation(fields: [brandOwnerId], references: [id], onDelete: Cascade)
+
+  name          String
+  productCode   String
+  description   String?
+  category      String
+  isActive      Boolean  @default(true)
+
+  variants      ProductVariant[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([brandOwnerId, productCode])
+  @@index([brandOwnerId])
+}
+
+model ProductVariant {
+  id             String   @id @default(uuid())
+  productId      String
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  sku            String   @unique
+  size           String?
+  color          String?
+
+  mrp            Decimal   @db.Decimal(10,2)
+  wholesalePrice Decimal   @db.Decimal(10,2)
+  stockQty       Int
+
+  orderItems     OrderItem[]
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([productId])
+}
+
+//////////////////////////////
+// ORDERS
+//////////////////////////////
+
+model Order {
+  id            String   @id @default(uuid())
+  orderNumber   String   @unique
+
+  brandOwnerId  String
+  shopOwnerId   String
+
+  brandOwner    BrandOwner @relation(fields: [brandOwnerId], references: [id])
+  shopOwner     ShopOwner  @relation(fields: [shopOwnerId], references: [id])
+
+  totalAmount   Decimal    @db.Decimal(12,2)
+
+  status        OrderStatus
+  paymentStatus PaymentStatus
+
+  items         OrderItem[]
+  payments      PaymentRecord[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([brandOwnerId])
+  @@index([shopOwnerId])
+}
+
+model OrderItem {
+  id               String   @id @default(uuid())
+
+  orderId          String
+  order            Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productVariantId String
+  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id])
+
+  quantity         Int
+  priceAtOrder     Decimal  @db.Decimal(10,2)
+  totalPrice       Decimal  @db.Decimal(12,2)
+
+  createdAt        DateTime @default(now())
+
+  @@index([orderId])
+  @@index([productVariantId])
+}
+
+model PaymentRecord {
+  id         String   @id @default(uuid())
+
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  amountPaid Decimal   @db.Decimal(12,2)
+  paymentDate DateTime
+  note       String?
+
+  createdAt  DateTime @default(now())
+
+  @@index([orderId])
+}
