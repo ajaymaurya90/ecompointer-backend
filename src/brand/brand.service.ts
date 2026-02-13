@@ -54,5 +54,9 @@ export class BrandService {
         });
     }
 
+    async findAll() {
+        return this.prisma.brand.findMany();
+    }
+
 
 }

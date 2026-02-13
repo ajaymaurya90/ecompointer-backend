@@ -34,6 +34,11 @@ enum PaymentStatus {
   PAID
 }
 
+enum Role {
+  USER
+  ADMIN
+}
+
 //////////////////////////////
 // CORE USERS
 //////////////////////////////
@@ -53,7 +58,7 @@ model BrandOwner {
   orders      Order[]
 
   brands      Brand[]
-
+  role        Role     @default(USER)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

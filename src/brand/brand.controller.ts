@@ -6,8 +6,10 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtUser } from '../auth/types/jwt-user.type';
 import { Param, Patch, Delete } from '@nestjs/common';
 import { UpdateBrandDto } from './dto/update-brand.dto';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
 
-@UseGuards(AuthGuard('jwt'))
+@UseGuards(AuthGuard('jwt'), RolesGuard)
 @Controller('brand')
 export class BrandController {
     constructor(private readonly brandService: BrandService) { }
@@ -38,5 +40,11 @@ export class BrandController {
     @Delete(':id')
     remove(@Param('id') id: string, @CurrentUser() user: JwtUser,) {
         return this.brandService.remove(id, user.id);
+    }
+
+    @Get('admin/all')
+    @Roles('ADMIN')
+    findAllBrandsForAdmin() {
+        return this.brandService.findAll();
     }
 }
