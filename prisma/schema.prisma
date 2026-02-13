@@ -52,10 +52,21 @@ model BrandOwner {
   shopLinks   BrandOwnerShop[]
   orders      Order[]
 
+  brands      Brand[]
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([email])
+}
+
+model Brand {
+  id        String      @id @default(uuid())
+  name      String
+  createdAt DateTime    @default(now())
+
+  ownerId   String
+  owner     BrandOwner  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 }
 
 model ShopOwner {

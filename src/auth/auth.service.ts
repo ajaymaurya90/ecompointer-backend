@@ -51,11 +51,12 @@ export class AuthService {
 
         //const token = this.jwtService.sign({ userId: user.id });
         const token = this.jwtService.sign({
-        sub: user.id,
-        email: user.email,
+            sub: user.id,
+            email: user.email,
         });
 
         return { access_token: token };
     }
+
 }
 
