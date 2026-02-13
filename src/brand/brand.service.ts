@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateBrandDto } from './dto/create-brand.dto';
+import { UpdateBrandDto } from './dto/update-brand.dto';
 
 @Injectable()
 export class BrandService {
@@ -20,4 +21,38 @@ export class BrandService {
             where: { ownerId: userId },
         });
     }
+
+    async findOne(id: string, userId: string) {
+        const brand = await this.prisma.brand.findFirst({
+            where: {
+                id,
+                ownerId: userId,
+            },
+        });
+
+        if (!brand) {
+            throw new NotFoundException('Brand not found');
+        }
+
+        return brand;
+    }
+
+    async update(id: string, data: UpdateBrandDto, userId: string) {
+        await this.findOne(id, userId); // ownership check
+
+        return this.prisma.brand.update({
+            where: { id },
+            data,
+        });
+    }
+
+    async remove(id: string, userId: string) {
+        await this.findOne(id, userId); // ownership check
+
+        return this.prisma.brand.delete({
+            where: { id },
+        });
+    }
+
+
 }
