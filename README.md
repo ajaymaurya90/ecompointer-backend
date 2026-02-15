@@ -1,130 +1,128 @@
-🚀 EcomPointer Backend API
+<p align="center">
+  <h1 align="center">🚀 EcomPointer Backend API</h1>
+  <p align="center">
+    Production-ready backend built with NestJS, Prisma & Secure JWT Authentication
+  </p>
+</p>
 
-Production-ready backend built with NestJS, Prisma, and secure JWT Authentication with Refresh Token Rotation.
+<p align="center">
+  <img src="https://img.shields.io/badge/NestJS-Framework-red" />
+  <img src="https://img.shields.io/badge/Prisma-ORM-blue" />
+  <img src="https://img.shields.io/badge/JWT-Secure-green" />
+  <img src="https://img.shields.io/badge/License-MIT-black" />
+</p>
 
-This project is the foundation for a scalable inventory & product management system with role-based access control.
+---
 
-🏗 Tech Stack
+## 📌 Overview
 
-NestJS – Scalable Node.js framework
+EcomPointer Backend is a scalable authentication and foundation layer for a product & inventory management system.
 
-Prisma ORM – Type-safe database access
+It implements a **production-grade JWT authentication system** with secure refresh token rotation and role-based access control (RBAC).
 
-PostgreSQL (configurable)
+---
 
-JWT (Access + Refresh Tokens)
+# 🏗 Tech Stack
 
-Passport.js
+| Technology | Purpose |
+|------------|----------|
+| **NestJS** | Scalable Node.js framework |
+| **Prisma ORM** | Type-safe database access |
+| **PostgreSQL** | Primary database |
+| **JWT** | Access & Refresh token authentication |
+| **Passport.js** | Strategy-based authentication |
+| **bcrypt** | Password hashing |
+| **Swagger** | API documentation |
+| **class-validator** | Request validation |
 
-bcrypt
+---
 
-Swagger (OpenAPI)
+# 🔐 Authentication Architecture
 
-class-validator / class-transformer
+### ✅ Implemented Features
 
-🔐 Authentication Architecture
+- User Registration
+- Login with bcrypt-hashed passwords
+- Access Token (15 minutes)
+- Refresh Token (7 days)
+- Refresh Token Rotation
+- tokenVersion-based invalidation
+- Hashed refresh token storage
+- Secure Logout
+- Role-Based Access Control (RBAC)
+- Global Request Validation
+- Swagger API Documentation
 
-This backend implements a secure JWT authentication system with refresh token rotation.
+---
 
-Implemented Features
+# 🔄 Refresh Token Rotation (Security Model)
 
-User Registration
+Each user contains:
 
-Login with bcrypt-hashed passwords
-
-Access Token (15 minutes)
-
-Refresh Token (7 days)
-
-Refresh Token Rotation
-
-tokenVersion-based invalidation
-
-Hashed refresh token storage
-
-Secure Logout
-
-Role-Based Access Control (RBAC)
-
-Global Request Validation
-
-Swagger API Documentation
-
-🔄 Refresh Token Rotation (Security Model)
-
-Each user has:
-
+```ts
 tokenVersion: number
 refreshToken: string | null
+```
 
-Flow:
+### 🔁 Flow
 
-User logs in → receives tokens (version 0)
+1. User logs in → receives tokens (version 0)
+2. On refresh:
+   - JWT is verified
+   - tokenVersion is validated
+   - Stored refresh token hash is compared
+   - tokenVersion is incremented
+   - New tokens issued
+3. Old refresh tokens become invalid immediately
 
-On refresh:
+---
 
-JWT is verified
+### 🛡 Protected Against
 
-tokenVersion is validated
+- Refresh token reuse
+- Replay attacks
+- Token theft misuse
+- Session hijacking
 
-Stored refresh token hash is compared
+---
 
-tokenVersion is incremented
+# 🛡 Security Measures
 
-New tokens issued
+- bcrypt password hashing
+- Hashed refresh tokens in database
+- Token version validation
+- JWT expiration enforcement
+- Global ValidationPipe:
+  ```ts
+  whitelist: true
+  forbidNonWhitelisted: true
+  transform: true
+  ```
+- Role-based guards
+- Protected routes via JwtGuard
 
-Old refresh tokens become invalid immediately
+---
 
-Protection Against:
-
-Refresh token reuse
-
-Replay attacks
-
-Token theft misuse
-
-Session hijacking
-
-🛡 Security Measures
-
-bcrypt password hashing
-
-Hashed refresh tokens in database
-
-Token version validation
-
-JWT expiration enforced
-
-Global ValidationPipe:
-
-whitelist: true
-
-forbidNonWhitelisted: true
-
-transform: true
-
-Role-based guards
-
-Protected routes via JwtGuard
-
-📘 API Documentation (Swagger)
+# 📘 API Documentation
 
 Swagger UI available at:
 
+```
 http://localhost:3000/api-docs
+```
 
+### Features
 
-Features:
+- Interactive API testing
+- Bearer token authorization
+- DTO schema visualization
+- Versioned API metadata
 
-Interactive API testing
+---
 
-Bearer token authorization
+# 📂 Project Structure
 
-DTO schema visualization
-
-Versioned API metadata
-
-📂 Project Structure
+```
 src/
  ├── auth/
  │    ├── auth.controller.ts
@@ -145,93 +143,115 @@ src/
  ├── prisma/
  ├── main.ts
  └── app.module.ts
+```
 
-🔑 Environment Variables
+---
 
-Create a .env file in the root:
+# 🔑 Environment Variables
 
+Create a `.env` file:
+
+```env
 PORT=3000
 
 DATABASE_URL="postgresql://user:password@localhost:5432/dbname"
 
 JWT_ACCESS_SECRET=your_access_secret
 JWT_REFRESH_SECRET=your_refresh_secret
+```
 
+⚠️ **Never commit `.env` to Git**  
+Use `.env.example` instead.
 
-⚠️ Never commit .env to Git.
-Include .env.example instead.
+---
 
-▶️ Getting Started
-1️⃣ Install Dependencies
+# ▶️ Getting Started
+
+### 1️⃣ Install Dependencies
+
+```bash
 npm install
+```
 
-2️⃣ Setup Database
+### 2️⃣ Setup Database
+
+```bash
 npx prisma migrate dev
+```
 
-3️⃣ Start Development Server
+### 3️⃣ Start Development Server
+
+```bash
 npm run start:dev
+```
 
+Server runs at:
 
-Server runs on:
-
+```
 http://localhost:3000
+```
 
-🔐 Auth Endpoints
-Method	Endpoint	Description
-POST	/auth/register	Register a new brand owner
-POST	/auth/login	Login & receive tokens
-POST	/auth/refresh	Rotate refresh token
-POST	/auth/logout	Logout & invalidate session
-GET	/auth/profile	Get authenticated user profile
-🧪 Manual Auth Test Flow
+---
 
-Register a user
+# 🔐 Auth Endpoints
 
-Login
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/auth/register` | Register new brand owner |
+| POST | `/auth/login` | Login & receive tokens |
+| POST | `/auth/refresh` | Rotate refresh token |
+| POST | `/auth/logout` | Logout & invalidate session |
+| GET | `/auth/profile` | Get authenticated profile |
 
-Copy refresh token
+---
 
-Call /auth/refresh
+# 🧪 Manual Test Flow
 
-Reuse old refresh token → expect 401 Unauthorized
+1. Register user
+2. Login
+3. Copy refresh token
+4. Call `/auth/refresh`
+5. Reuse old refresh token → expect **401 Unauthorized**
+6. Logout
+7. Attempt refresh again → expect failure
 
-Logout
+---
 
-Attempt refresh again → expect failure
+# 📌 Current Status
 
-📌 Current Status
+- ✅ Auth module complete  
+- ✅ Secure refresh token rotation  
+- ✅ Role-based guard implementation  
+- ✅ Swagger integration  
+- ✅ Clean architectural structure  
 
-✅ Auth module complete
-✅ Secure refresh token rotation
-✅ Role-based guard implementation
-✅ Swagger integration
-✅ Clean code with architectural comments
+---
 
-🚧 Upcoming Modules
+# 🚧 Upcoming Modules
 
-Product Management
+- Product Management
+- Inventory Tracking
+- Order System
+- Brand ownership isolation
+- Advanced RBAC
+- Multi-tenant scalability
 
-Inventory Tracking
+---
 
-Order System
+# 👨‍💻 Author
 
-Brand ownership isolation
+**Ajay Maurya**  
+🌐 https://4thpointer.com  
+📧 ajay@4thpointer.com  
 
-Advanced RBAC
+---
 
-Multi-tenant scalability
-
-👨‍💻 Author
-
-Ajay Maurya
-https://4thpointer.com
-
-ajay@4thpointer.com
-
-📄 License
+# 📄 License
 
 MIT License
 
-🔥 Project Goal
+---
+
+# 🎯 Project Goal
 
 Build a scalable, secure, and production-ready backend system suitable for real-world inventory and product management platforms.
