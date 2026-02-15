@@ -1,98 +1,237 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+🚀 EcomPointer Backend API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Production-ready backend built with NestJS, Prisma, and secure JWT Authentication with Refresh Token Rotation.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+This project is the foundation for a scalable inventory & product management system with role-based access control.
 
-## Description
+🏗 Tech Stack
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+NestJS – Scalable Node.js framework
 
-## Project setup
+Prisma ORM – Type-safe database access
 
-```bash
-$ npm install
-```
+PostgreSQL (configurable)
 
-## Compile and run the project
+JWT (Access + Refresh Tokens)
 
-```bash
-# development
-$ npm run start
+Passport.js
 
-# watch mode
-$ npm run start:dev
+bcrypt
 
-# production mode
-$ npm run start:prod
-```
+Swagger (OpenAPI)
 
-## Run tests
+class-validator / class-transformer
 
-```bash
-# unit tests
-$ npm run test
+🔐 Authentication Architecture
 
-# e2e tests
-$ npm run test:e2e
+This backend implements a secure JWT authentication system with refresh token rotation.
 
-# test coverage
-$ npm run test:cov
-```
+Implemented Features
 
-## Deployment
+User Registration
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+Login with bcrypt-hashed passwords
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+Access Token (15 minutes)
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
+Refresh Token (7 days)
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+Refresh Token Rotation
 
-## Resources
+tokenVersion-based invalidation
 
-Check out a few resources that may come in handy when working with NestJS:
+Hashed refresh token storage
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+Secure Logout
 
-## Support
+Role-Based Access Control (RBAC)
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+Global Request Validation
 
-## Stay in touch
+Swagger API Documentation
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+🔄 Refresh Token Rotation (Security Model)
 
-## License
+Each user has:
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+tokenVersion: number
+refreshToken: string | null
+
+Flow:
+
+User logs in → receives tokens (version 0)
+
+On refresh:
+
+JWT is verified
+
+tokenVersion is validated
+
+Stored refresh token hash is compared
+
+tokenVersion is incremented
+
+New tokens issued
+
+Old refresh tokens become invalid immediately
+
+Protection Against:
+
+Refresh token reuse
+
+Replay attacks
+
+Token theft misuse
+
+Session hijacking
+
+🛡 Security Measures
+
+bcrypt password hashing
+
+Hashed refresh tokens in database
+
+Token version validation
+
+JWT expiration enforced
+
+Global ValidationPipe:
+
+whitelist: true
+
+forbidNonWhitelisted: true
+
+transform: true
+
+Role-based guards
+
+Protected routes via JwtGuard
+
+📘 API Documentation (Swagger)
+
+Swagger UI available at:
+
+http://localhost:3000/api-docs
+
+
+Features:
+
+Interactive API testing
+
+Bearer token authorization
+
+DTO schema visualization
+
+Versioned API metadata
+
+📂 Project Structure
+src/
+ ├── auth/
+ │    ├── auth.controller.ts
+ │    ├── auth.service.ts
+ │    ├── auth.module.ts
+ │    ├── jwt.strategy.ts
+ │    ├── jwt.guard.ts
+ │    ├── guards/
+ │    │     └── roles.guard.ts
+ │    ├── decorators/
+ │    │     └── roles.decorator.ts
+ │    ├── dto/
+ │    │     ├── register.dto.ts
+ │    │     └── login.dto.ts
+ │    └── types/
+ │          └── jwt-user.type.ts
+ │
+ ├── prisma/
+ ├── main.ts
+ └── app.module.ts
+
+🔑 Environment Variables
+
+Create a .env file in the root:
+
+PORT=3000
+
+DATABASE_URL="postgresql://user:password@localhost:5432/dbname"
+
+JWT_ACCESS_SECRET=your_access_secret
+JWT_REFRESH_SECRET=your_refresh_secret
+
+
+⚠️ Never commit .env to Git.
+Include .env.example instead.
+
+▶️ Getting Started
+1️⃣ Install Dependencies
+npm install
+
+2️⃣ Setup Database
+npx prisma migrate dev
+
+3️⃣ Start Development Server
+npm run start:dev
+
+
+Server runs on:
+
+http://localhost:3000
+
+🔐 Auth Endpoints
+Method	Endpoint	Description
+POST	/auth/register	Register a new brand owner
+POST	/auth/login	Login & receive tokens
+POST	/auth/refresh	Rotate refresh token
+POST	/auth/logout	Logout & invalidate session
+GET	/auth/profile	Get authenticated user profile
+🧪 Manual Auth Test Flow
+
+Register a user
+
+Login
+
+Copy refresh token
+
+Call /auth/refresh
+
+Reuse old refresh token → expect 401 Unauthorized
+
+Logout
+
+Attempt refresh again → expect failure
+
+📌 Current Status
+
+✅ Auth module complete
+✅ Secure refresh token rotation
+✅ Role-based guard implementation
+✅ Swagger integration
+✅ Clean code with architectural comments
+
+🚧 Upcoming Modules
+
+Product Management
+
+Inventory Tracking
+
+Order System
+
+Brand ownership isolation
+
+Advanced RBAC
+
+Multi-tenant scalability
+
+👨‍💻 Author
+
+Ajay Maurya
+https://4thpointer.com
+
+ajay@4thpointer.com
+
+📄 License
+
+MIT License
+
+🔥 Project Goal
+
+Build a scalable, secure, and production-ready backend system suitable for real-world inventory and product management platforms.
