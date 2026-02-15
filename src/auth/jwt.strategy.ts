@@ -5,15 +5,20 @@ import { ConfigService } from '@nestjs/config';
 import { JwtUser } from './types/jwt-user.type';
 
 @Injectable()
+// JwtStrategy validates access tokens for protected routes
 export class JwtStrategy extends PassportStrategy(Strategy) {
     constructor(private config: ConfigService) {
         super({
+            // Extract JWT from Authorization: Bearer <token>
             jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+            // Reject expired tokens automatically
             ignoreExpiration: false,
-            secretOrKey: config.get<string>('JWT_SECRET')!,
+            // Use access token secret for verification
+            secretOrKey: config.get<string>('JWT_ACCESS_SECRET')!,
         });
     }
 
+    // Attach validated user data to request object (req.user)
     async validate(payload: any): Promise<JwtUser> {
         return {
             id: payload.sub,
