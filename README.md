@@ -1,5 +1,5 @@
 <p align="center">
-  <h1 align="center">🚀 EcomPointer Backend API</h1>
+  <h1 align="center">EcomPointer Backend API</h1>
   <p align="center">
     Production-ready backend built with NestJS, Prisma & Secure JWT Authentication
   </p>
@@ -9,62 +9,106 @@
   <img src="https://img.shields.io/badge/NestJS-Framework-red" />
   <img src="https://img.shields.io/badge/Prisma-ORM-blue" />
   <img src="https://img.shields.io/badge/JWT-Secure-green" />
+  <img src="https://img.shields.io/badge/PostgreSQL-Database-blue" />
   <img src="https://img.shields.io/badge/License-MIT-black" />
 </p>
 
 ---
 
-## 📌 Overview
+## Overview
 
-EcomPointer Backend is a scalable authentication and foundation layer for a product & inventory management system.
+EcomPointer Backend is a scalable and production-ready backend system for product and inventory management platforms.
 
-It implements a **production-grade JWT authentication system** with secure refresh token rotation and role-based access control (RBAC).
-
----
-
-# 🏗 Tech Stack
-
-| Technology | Purpose |
-|------------|----------|
-| **NestJS** | Scalable Node.js framework |
-| **Prisma ORM** | Type-safe database access |
-| **PostgreSQL** | Primary database |
-| **JWT** | Access & Refresh token authentication |
-| **Passport.js** | Strategy-based authentication |
-| **bcrypt** | Password hashing |
-| **Swagger** | API documentation |
-| **class-validator** | Request validation |
+The system provides secure authentication, brand-based data isolation, and a modular product management architecture suitable for multi-tenant commerce systems.
 
 ---
 
-# 🔐 Authentication Architecture
+## Implemented Features
 
-### ✅ Implemented Features
+### Authentication & Security
 
-- User Registration
-- Login with bcrypt-hashed passwords
-- Access Token (15 minutes)
-- Refresh Token (7 days)
+- User Registration (Brand Owner)
+- Secure Login with bcrypt password hashing
+- JWT Access Token (15 minutes)
+- JWT Refresh Token (7 days)
 - Refresh Token Rotation
-- tokenVersion-based invalidation
+- tokenVersion-based session invalidation
 - Hashed refresh token storage
 - Secure Logout
 - Role-Based Access Control (RBAC)
-- Global Request Validation
-- Swagger API Documentation
+- Global ValidationPipe configuration
+- Protected routes using JwtGuard
+
+### Product Management
+
+- Product creation per brand
+- Product update
+- Product soft delete support
+- Brand-based product isolation
+- Swagger-documented endpoints
+
+### Product Variants
+
+- Variant creation per product
+- Variant update
+- Variant-level pricing
+- Variant SKU support
+- Stock quantity management
+
+### Product Categories
+
+- Create root categories
+- Create subcategories (parent-child structure)
+- Fetch categories by brand
+- Hierarchical category support
+- Brand isolation for categories
+
+### Media Management
+
+- Attach media to products
+- Primary image support
+- Media sorting support
+- Media activation toggle
+- Alt text support
 
 ---
 
-# 🔄 Refresh Token Rotation (Security Model)
+## Tech Stack
+
+| Technology | Purpose |
+|------------|----------|
+| NestJS | Scalable Node.js framework |
+| Prisma ORM | Type-safe database access |
+| PostgreSQL | Primary database |
+| JWT | Access & Refresh token authentication |
+| Passport.js | Strategy-based authentication |
+| bcrypt | Password hashing |
+| Swagger | API documentation |
+| class-validator | Request validation |
+
+---
+
+## Authentication Architecture
+
+- Access + Refresh token system
+- Secure refresh token rotation
+- Hashed refresh token storage
+- Token version invalidation
+- Role-based access control
+- Brand ownership isolation
+
+---
+
+## Refresh Token Rotation Security Model
 
 Each user contains:
 
-```ts
+```
 tokenVersion: number
 refreshToken: string | null
 ```
 
-### 🔁 Flow
+Flow:
 
 1. User logs in → receives tokens (version 0)
 2. On refresh:
@@ -75,9 +119,7 @@ refreshToken: string | null
    - New tokens issued
 3. Old refresh tokens become invalid immediately
 
----
-
-### 🛡 Protected Against
+Protected Against:
 
 - Refresh token reuse
 - Replay attacks
@@ -86,24 +128,25 @@ refreshToken: string | null
 
 ---
 
-# 🛡 Security Measures
+## Security Measures
 
 - bcrypt password hashing
 - Hashed refresh tokens in database
 - Token version validation
 - JWT expiration enforcement
 - Global ValidationPipe:
-  ```ts
+  ```
   whitelist: true
   forbidNonWhitelisted: true
   transform: true
   ```
 - Role-based guards
-- Protected routes via JwtGuard
+- Brand ownership validation inside services
+- Swagger secured with bearer authentication
 
 ---
 
-# 📘 API Documentation
+## API Documentation
 
 Swagger UI available at:
 
@@ -111,7 +154,7 @@ Swagger UI available at:
 http://localhost:3000/api-docs
 ```
 
-### Features
+Features:
 
 - Interactive API testing
 - Bearer token authorization
@@ -120,7 +163,7 @@ http://localhost:3000/api-docs
 
 ---
 
-# 📂 Project Structure
+## Project Structure
 
 ```
 src/
@@ -131,14 +174,33 @@ src/
  │    ├── jwt.strategy.ts
  │    ├── jwt.guard.ts
  │    ├── guards/
- │    │     └── roles.guard.ts
  │    ├── decorators/
- │    │     └── roles.decorator.ts
  │    ├── dto/
- │    │     ├── register.dto.ts
- │    │     └── login.dto.ts
  │    └── types/
- │          └── jwt-user.type.ts
+ │
+ ├── product/
+ │    ├── product.controller.ts
+ │    ├── product.service.ts
+ │    ├── product.module.ts
+ │    └── dto/
+ │
+ ├── product-variant/
+ │    ├── product-variant.controller.ts
+ │    ├── product-variant.service.ts
+ │    ├── product-variant.module.ts
+ │    └── dto/
+ │
+ ├── product-category/
+ │    ├── product-category.controller.ts
+ │    ├── product-category.service.ts
+ │    ├── product-category.module.ts
+ │    └── dto/
+ │
+ ├── media/
+ │    ├── media.controller.ts
+ │    ├── media.service.ts
+ │    ├── media.module.ts
+ │    └── dto/
  │
  ├── prisma/
  ├── main.ts
@@ -147,7 +209,7 @@ src/
 
 ---
 
-# 🔑 Environment Variables
+## Environment Variables
 
 Create a `.env` file:
 
@@ -160,26 +222,26 @@ JWT_ACCESS_SECRET=your_access_secret
 JWT_REFRESH_SECRET=your_refresh_secret
 ```
 
-⚠️ **Never commit `.env` to Git**  
+Never commit `.env` to Git.  
 Use `.env.example` instead.
 
 ---
 
-# ▶️ Getting Started
+## Getting Started
 
-### 1️⃣ Install Dependencies
+### Install Dependencies
 
 ```bash
 npm install
 ```
 
-### 2️⃣ Setup Database
+### Setup Database
 
 ```bash
 npx prisma migrate dev
 ```
 
-### 3️⃣ Start Development Server
+### Start Development Server
 
 ```bash
 npm run start:dev
@@ -193,7 +255,7 @@ http://localhost:3000
 
 ---
 
-# 🔐 Auth Endpoints
+## Auth Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -205,53 +267,87 @@ http://localhost:3000
 
 ---
 
-# 🧪 Manual Test Flow
+## Product Endpoints
 
-1. Register user
-2. Login
-3. Copy refresh token
-4. Call `/auth/refresh`
-5. Reuse old refresh token → expect **401 Unauthorized**
-6. Logout
-7. Attempt refresh again → expect failure
-
----
-
-# 📌 Current Status
-
-- ✅ Auth module complete  
-- ✅ Secure refresh token rotation  
-- ✅ Role-based guard implementation  
-- ✅ Swagger integration  
-- ✅ Clean architectural structure  
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/products` | Create product |
+| GET | `/products` | Get brand products |
+| GET | `/products/:id` | Get product by id |
+| PATCH | `/products/:id` | Update product |
+| DELETE | `/products/:id` | Soft delete product |
 
 ---
 
-# 🚧 Upcoming Modules
+## Product Variant Endpoints
 
-- Product Management
-- Inventory Tracking
-- Order System
-- Brand ownership isolation
-- Advanced RBAC
-- Multi-tenant scalability
-
----
-
-# 👨‍💻 Author
-
-**Ajay Maurya**  
-🌐 https://4thpointer.com  
-📧 ajay@4thpointer.com  
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/product-variants` | Create variant |
+| GET | `/product-variants/product/:productId` | Get variants by product |
+| PATCH | `/product-variants/:id` | Update variant |
+| DELETE | `/product-variants/:id` | Delete variant |
 
 ---
 
-# 📄 License
+## Category Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/categories` | Create category |
+| GET | `/categories` | Get categories by brand |
+
+---
+
+## Media Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/media` | Attach media to product |
+| PATCH | `/media/:id` | Update media |
+| DELETE | `/media/:id` | Remove media |
+
+---
+
+## Current Status
+
+- Auth module complete
+- Secure refresh token rotation implemented
+- Role-based guard implementation
+- Product module complete
+- Product Variant module complete
+- Product Category module complete
+- Media module complete
+- Swagger integration
+- Brand-level data isolation enforced
+- Clean modular architecture
+
+---
+
+## Upcoming Improvements
+
+- Inventory auto-adjustment logic
+- Order management module
+- Image upload integration (S3 / Cloud storage)
+- Admin dashboard
+- Multi-tenant scalability enhancements
+
+---
+
+## Author
+
+Ajay Maurya  
+https://4thpointer.com  
+ajay@4thpointer.com  
+
+---
+
+## License
 
 MIT License
 
 ---
 
-# 🎯 Project Goal
+## Project Goal
 
-Build a scalable, secure, and production-ready backend system suitable for real-world inventory and product management platforms.
+Build a scalable, secure, and production-ready backend system suitable for real-world inventory and product management platforms with multi-brand isolation and enterprise-grade authentication.
