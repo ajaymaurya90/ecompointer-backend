@@ -1,3 +1,27 @@
+/**
+ * ---------------------------------------------------------
+ * PRODUCT VARIANT SERVICE
+ * ---------------------------------------------------------
+ * Primary Responsibilities:
+ *
+ * 1. Create product variants under a product
+ * 2. Auto-generate SKU based on productCode + attributes
+ * 3. Prevent duplicate SKU globally
+ * 4. Calculate gross prices from net + tax rate
+ * 5. Update financial & stock information
+ * 6. Soft delete variants (isActive flag)
+ *
+ * Business Rules:
+ * - Variant must belong to an existing product
+ * - SKU must be unique
+ * - Gross prices are always derived from net + tax
+ * - Financial calculations are centralized here
+ * - No hard deletes (soft delete only)
+ *
+ * Designed for scalable multi-variant e-commerce systems.
+ * ---------------------------------------------------------
+ */
+
 import {
     Injectable,
     NotFoundException,
@@ -12,6 +36,16 @@ import { UpdateProductVariantDto } from './dto/update-product-variant.dto';
 export class ProductVariantService {
     constructor(private prisma: PrismaService) { }
 
+    /**
+   * Generate SKU automatically based on:
+   * - productCode
+   * - size (optional)
+   * - color (optional)
+   *
+   * Example:
+   * PROD123-M-BLACK
+   * PROD123-DEFAULT
+   */
     private generateSku(
         productCode: string,
         size?: string,
@@ -28,15 +62,31 @@ export class ProductVariantService {
             : `${productCode}-DEFAULT`;
     }
 
+    /**
+   * Calculate gross price from:
+   * net + taxRate (%)
+   *
+   * Ensures 2 decimal precision.
+   */
     private calculateGross(net: number, taxRate: number): number {
         return Number((net + (net * taxRate) / 100).toFixed(2));
     }
 
+    /**
+   * Create new product variant
+   *
+   * Flow:
+   * Validate product exists
+   * Generate or accept SKU
+   * Prevent duplicate SKU
+   * Calculate gross prices
+   * Create variant
+   */
     async create(
         productId: string,
         dto: CreateProductVariantDto,
     ) {
-        // 1️⃣ Ensure product exists
+        // Ensure product exists
         const product = await this.prisma.product.findUnique({
             where: { id: productId },
         });
@@ -45,12 +95,12 @@ export class ProductVariantService {
             throw new NotFoundException('Product not found');
         }
 
-        // 2️⃣ Generate SKU (or use override)
+        // Generate SKU (if not manually provided)
         const sku =
             dto.sku ??
             this.generateSku(product.productCode, dto.size, dto.color);
 
-        // 3️⃣ Prevent duplicate SKU
+        // Prevent duplicate SKU globally
         const existing = await this.prisma.productVariant.findUnique({
             where: { sku },
         });
@@ -59,7 +109,7 @@ export class ProductVariantService {
             throw new BadRequestException('SKU already exists');
         }
 
-        // 4️⃣ Calculate gross prices
+        // Calculate gross prices
         const wholesaleGross = this.calculateGross(
             dto.wholesaleNet,
             dto.taxRate,
@@ -70,7 +120,7 @@ export class ProductVariantService {
             dto.taxRate,
         );
 
-        // 5️⃣ Create variant
+        // Create variant
         try {
             return await this.prisma.productVariant.create({
                 data: {
@@ -88,6 +138,7 @@ export class ProductVariantService {
                 },
             });
         } catch (error) {
+            // Handle unique constraint (Prisma P2002)
             if (
                 error instanceof Prisma.PrismaClientKnownRequestError &&
                 error.code === 'P2002'
@@ -100,6 +151,13 @@ export class ProductVariantService {
 
     }
 
+    /**
+   * Update variant financials & stock
+   *
+   * Rules:
+   * - Recalculate gross values if net or tax changes
+   * - Prevent updates on inactive variants
+   */
     async update(
         variantId: string,
         dto: UpdateProductVariantDto,
@@ -136,6 +194,12 @@ export class ProductVariantService {
         });
     }
 
+    /**
+   * Soft delete variant
+   *
+   * - Sets isActive = false
+   * - Keeps historical data intact
+   */
     async remove(variantId: string) {
         const variant = await this.prisma.productVariant.findUnique({
             where: { id: variantId },

@@ -1,3 +1,27 @@
+/**
+ * ---------------------------------------------------------
+ * MEDIA SERVICE
+ * ---------------------------------------------------------
+ * Primary Responsibilities:
+ *
+ * 1. Attach media to either:
+ *      - Product
+ *      - Product Variant
+ * 2. Enforce strict ownership rules (cannot belong to both)
+ * 3. Maintain exactly ONE primary media per parent
+ * 4. Prevent removal of the only primary media
+ * 5. Auto-assign primary when none exists
+ * 6. Maintain media ordering (sortOrder)
+ *
+ * Business Rules:
+ * - Media must belong to either product OR variant (never both)
+ * - Only one active primary media per parent
+ * - Cannot disable the only primary image
+ * - Soft-state consistency maintained via transactions
+ *
+ * Designed for scalable e-commerce media management.
+ * ---------------------------------------------------------
+ */
 import {
     Injectable,
     BadRequestException,
@@ -11,8 +35,18 @@ import { UpdateMediaDto } from './dto/update-media.dto';
 export class MediaService {
     constructor(private prisma: PrismaService) { }
 
+    /**
+   * Create new media entry
+   *
+   * Flow:
+   * Validate ownership (product OR variant)
+   * Validate parent existence
+   * Reset existing primary (if needed)
+   * Create media
+   * Ensure at least one primary exists
+   */
     async create(dto: CreateMediaDto) {
-        // Rule 1: Must belong to product OR variant
+        // Ownership validation: Must belong to product OR variant
         if (!dto.productId && !dto.variantId) {
             throw new BadRequestException(
                 'Media must belong to product or variant',
@@ -25,7 +59,7 @@ export class MediaService {
             );
         }
 
-        // Validate existence
+        // Validate parent existence
         if (dto.productId) {
             const product = await this.prisma.product.findUnique({
                 where: { id: dto.productId },
@@ -58,6 +92,7 @@ export class MediaService {
             });
         }
 
+        // Create media record
         const created = await this.prisma.media.create({
             data: {
                 productId: dto.productId,
@@ -70,7 +105,7 @@ export class MediaService {
             }
         });
 
-        // Auto-assign primary if none exists
+        // Ensure at least one primary exists
         const parentFilter = created.productId
             ? { productId: created.productId }
             : { variantId: created.variantId };
@@ -94,6 +129,16 @@ export class MediaService {
 
     }
 
+    /**
+   * Update media entry
+   *
+   * Rules enforced:
+   * - Cannot disable the only primary image
+   * - If setting new primary → reset others
+   * - If no primary remains → auto assign oldest active
+   *
+   * Uses transaction for consistency.
+   */
     async update(id: string, updateMediaDto: UpdateMediaDto) {
         const media = await this.prisma.media.findUnique({
             where: { id },
@@ -108,9 +153,7 @@ export class MediaService {
                 ? { productId: media.productId }
                 : { variantId: media.variantId };
 
-            // ------------------------------
-            // 1️⃣ Prevent disabling ONLY primary
-            // ------------------------------
+            // Prevent disabling ONLY primary
             if (
                 media.isPrimary &&
                 (updateMediaDto.isPrimary === false ||
@@ -132,9 +175,7 @@ export class MediaService {
                 }
             }
 
-            // ------------------------------
-            // 2️⃣ If setting new primary
-            // ------------------------------
+            // Assign new primary if requested
             if (updateMediaDto.isPrimary === true) {
                 await tx.media.updateMany({
                     where: {
@@ -150,9 +191,7 @@ export class MediaService {
                 data: updateMediaDto,
             });
 
-            // ------------------------------
-            // 3️⃣ Auto assign primary if none exists
-            // ------------------------------
+            // Auto assign primary if none exists
             const primaryExists = await tx.media.findFirst({
                 where: {
                     ...parentFilter,

@@ -32,6 +32,9 @@ async function bootstrap() {
       'https://opensource.org/licenses/MIT',
     )
     .addBearerAuth()        // Enable JWT authentication in Swagger
+    .addTag('Products')
+    .addTag('Product Variants')
+    .addTag('Media')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
