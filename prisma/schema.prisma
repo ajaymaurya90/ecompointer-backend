@@ -1,14 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
-
-  //provider = "prisma-client"
-  //output   = "../generated/prisma"
 }
 
 datasource db {
@@ -44,55 +35,47 @@ enum Role {
 //////////////////////////////
 
 model BrandOwner {
-  id          String   @id @default(uuid())
-  brandName   String
-  email       String   @unique
-  password    String
-  phone       String?
-  logoUrl     String?
-  address     String?
-  isActive    Boolean  @default(true)
+  id        String  @id @default(uuid())
+  brandName String
+  email     String  @unique
+  password  String
+  phone     String?
+  logoUrl   String?
+  address   String?
+  isActive  Boolean @default(true)
 
-  products    Product[]
-  shopLinks   BrandOwnerShop[]
-  orders      Order[]
+  brands    ProductBrand[]
+  shopLinks BrandOwnerShop[]
+  orders    Order[]
 
-  brands      Brand[]
-  role        Role     @default(USER)
-  refreshToken String? 
-  tokenVersion  Int      @default(0)
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  role         Role    @default(USER)
+  language     String? @default("en")
+  refreshToken String?
+  tokenVersion Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([email])
 }
 
-model Brand {
-  id        String      @id @default(uuid())
-  name      String
-  createdAt DateTime    @default(now())
-
-  ownerId   String
-  owner     BrandOwner  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-}
-
 model ShopOwner {
-  id          String   @id @default(uuid())
-  shopName    String
-  ownerName   String
-  phone       String
-  email       String?
-  address     String?
-  shopSlug    String   @unique
-  qrCodeUrl   String?
-  isActive    Boolean  @default(true)
+  id        String  @id @default(uuid())
+  shopName  String
+  ownerName String
+  phone     String
+  email     String?
+  address   String?
+  shopSlug  String  @unique
+  qrCodeUrl String?
+  isActive  Boolean @default(true)
+  language  String? @default("en")
 
-  brandLinks  BrandOwnerShop[]
-  orders      Order[]
+  brandLinks BrandOwnerShop[]
+  orders     Order[]
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([shopSlug])
 }
@@ -102,16 +85,15 @@ model ShopOwner {
 //////////////////////////////
 
 model BrandOwnerShop {
-  id            String      @id @default(uuid())
-  brandOwnerId  String
-  shopOwnerId   String
+  id           String @id @default(uuid())
+  brandOwnerId String
+  shopOwnerId  String
 
-  brandOwner    BrandOwner  @relation(fields: [brandOwnerId], references: [id], onDelete: Cascade)
-  shopOwner     ShopOwner   @relation(fields: [shopOwnerId], references: [id], onDelete: Cascade)
+  brandOwner BrandOwner @relation(fields: [brandOwnerId], references: [id], onDelete: Cascade)
+  shopOwner  ShopOwner  @relation(fields: [shopOwnerId], references: [id], onDelete: Cascade)
 
-  isActive      Boolean     @default(true)
-
-  createdAt     DateTime    @default(now())
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
 
   @@unique([brandOwnerId, shopOwnerId])
   @@index([brandOwnerId])
@@ -119,109 +101,213 @@ model BrandOwnerShop {
 }
 
 //////////////////////////////
-// PRODUCTS
+// PRODUCT DOMAIN
 //////////////////////////////
 
+model ProductBrand {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+
+  ownerId String
+  owner   BrandOwner @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  categories ProductCategory[]
+  products   Product[]
+
+  @@index([ownerId])
+}
+
+model ProductCategory {
+  id   String @id @default(uuid())
+  name String
+
+  brandId String
+  brand   ProductBrand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  // Self-referencing hierarchy
+  parentId String?
+  parent   ProductCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children ProductCategory[] @relation("CategoryHierarchy")
+
+  products Product[]
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Prevent duplicate category names at same level under same brand
+  @@unique([brandId, name, parentId])
+  @@index([brandId])
+  @@index([parentId])
+}
+
 model Product {
-  id            String   @id @default(uuid())
-  brandOwnerId  String
-  brandOwner    BrandOwner @relation(fields: [brandOwnerId], references: [id], onDelete: Cascade)
+  id          String @id @default(uuid())
+  name        String
+  productCode String
 
-  name          String
-  productCode   String
-  description   String?
-  category      String
-  isActive      Boolean  @default(true)
+  brandId String
+  brand   ProductBrand @relation(fields: [brandId], references: [id])
 
-  variants      ProductVariant[]
+  categoryId String
+  category   ProductCategory @relation(fields: [categoryId], references: [id])
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  description String?
+  isActive    Boolean @default(true)
 
-  @@unique([brandOwnerId, productCode])
-  @@index([brandOwnerId])
+  variants ProductVariant[]
+  media Media[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([brandId, productCode])
 }
 
 model ProductVariant {
-  id             String   @id @default(uuid())
-  productId      String
-  product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id String @id @default(uuid())
 
-  sku            String   @unique
-  size           String?
-  color          String?
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  mrp            Decimal   @db.Decimal(10,2)
-  wholesalePrice Decimal   @db.Decimal(10,2)
-  stockQty       Int
+  sku String @unique
 
-  orderItems     OrderItem[]
+  size  String?
+  color String?
 
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  taxRate   Float
+  costPrice Float
 
-  @@index([productId])
+  wholesaleNet   Float
+  wholesaleGross Float
+
+  retailNet   Float
+  retailGross Float
+
+  stock    Int     @default(0)
+  isActive Boolean @default(true)
+
+  inventories ProductInventory[]
+  orderItems  OrderItem[]
+  media Media[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ProductInventory {
+  id               String         @id @default(uuid())
+  productVariantId String
+  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+
+  quantity      Int
+  warehouseName String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productVariantId])
 }
 
 //////////////////////////////
-// ORDERS
+// ORDER DOMAIN
 //////////////////////////////
 
 model Order {
-  id            String   @id @default(uuid())
-  orderNumber   String   @unique
+  id          String @id @default(uuid())
+  orderNumber String @unique
 
-  brandOwnerId  String
-  shopOwnerId   String
+  brandOwnerId String
+  shopOwnerId  String
 
-  brandOwner    BrandOwner @relation(fields: [brandOwnerId], references: [id])
-  shopOwner     ShopOwner  @relation(fields: [shopOwnerId], references: [id])
+  brandOwner BrandOwner @relation(fields: [brandOwnerId], references: [id])
+  shopOwner  ShopOwner  @relation(fields: [shopOwnerId], references: [id])
 
-  totalAmount   Decimal    @db.Decimal(12,2)
+  totalAmount Decimal @db.Decimal(12, 2)
 
   status        OrderStatus
   paymentStatus PaymentStatus
 
-  items         OrderItem[]
-  payments      PaymentRecord[]
+  items    OrderItem[]
+  payments OrderPayment[]
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([brandOwnerId])
   @@index([shopOwnerId])
 }
 
 model OrderItem {
-  id               String   @id @default(uuid())
+  id String @id @default(uuid())
 
-  orderId          String
-  order            Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   productVariantId String
   productVariant   ProductVariant @relation(fields: [productVariantId], references: [id])
 
-  quantity         Int
-  priceAtOrder     Decimal  @db.Decimal(10,2)
-  totalPrice       Decimal  @db.Decimal(12,2)
+  quantity     Int
+  priceAtOrder Decimal @db.Decimal(10, 2)
+  totalPrice   Decimal @db.Decimal(12, 2)
 
-  createdAt        DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([orderId])
   @@index([productVariantId])
 }
 
-model PaymentRecord {
-  id         String   @id @default(uuid())
+model OrderPayment {
+  id String @id @default(uuid())
 
-  orderId    String
-  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  amountPaid Decimal   @db.Decimal(12,2)
+  amountPaid  Decimal  @db.Decimal(12, 2)
   paymentDate DateTime
-  note       String?
+  note        String?
 
-  createdAt  DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([orderId])
+}
+
+//////////////////////////////
+// MEDIA
+//////////////////////////////
+
+enum MediaType {
+  THUMBNAIL
+  GALLERY
+  ZOOM
+}
+
+model Media {
+  id         String   @id @default(uuid())
+
+  productId  String?
+  product    Product? @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  variantId  String?
+  variant    ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  url        String
+  altText    String?
+
+  type       MediaType @default(GALLERY)
+  isPrimary  Boolean   @default(false)
+  sortOrder  Int       @default(0)
+
+  isActive   Boolean   @default(true)
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([productId])
+  @@index([variantId])
+
+
 }

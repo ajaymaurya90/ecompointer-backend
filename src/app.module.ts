@@ -4,6 +4,10 @@ import { AppController } from './app.controller';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { BrandModule } from './brand/brand.module';
+import { ProductCategoryModule } from './product-category/product-category.module';
+import { ProductModule } from './product/product.module';
+import { ProductVariantModule } from './product-variant/product-variant.module';
+import { MediaModule } from './media/media.module';
 
 
 @Module({
@@ -13,7 +17,11 @@ import { BrandModule } from './brand/brand.module';
     }),
     PrismaModule,
     AuthModule,
-    BrandModule
+    BrandModule,
+    ProductCategoryModule,
+    ProductModule,
+    ProductVariantModule,
+    MediaModule
   ],
   controllers: [AppController],
 })
