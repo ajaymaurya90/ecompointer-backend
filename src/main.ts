@@ -2,11 +2,21 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
 
   // Create NestJS application instance
   const app = await NestFactory.create(AppModule);
+
+  // Use cookie parser middleware to handle cookies (for refresh tokens)
+  app.use(cookieParser());
+
+  // Enable CORS for frontend development server (http://localhost:3000)
+  app.enableCors({
+    origin: "http://localhost:3000",
+    credentials: true,
+  });
 
   // Enable global request validation using class-validator DTOs
   app.useGlobalPipes(
@@ -41,6 +51,6 @@ async function bootstrap() {
   // Serve Swagger UI at /api-docs
   SwaggerModule.setup('api-docs', app, document);
   // Start server
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(process.env.PORT ?? 3001);
 }
 bootstrap();

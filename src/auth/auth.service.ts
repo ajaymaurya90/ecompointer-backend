@@ -100,7 +100,36 @@ export class AuthService {
         return { accessToken, refreshToken };
     }
 
+    async refresh(refreshToken: string) {
+        try {
+            const payload = this.jwtService.verify(refreshToken, {
+                secret: process.env.JWT_REFRESH_SECRET,
+            });
 
+            const user = await this.prisma.brandOwner.findUnique({
+                where: { id: payload.sub },
+            });
+
+            if (!user || !user.refreshToken) {
+                throw new UnauthorizedException();
+            }
+
+            const isMatch = await bcrypt.compare(
+                refreshToken,
+                user.refreshToken,
+            );
+
+            if (!isMatch) {
+                throw new UnauthorizedException();
+            }
+
+            return this.generateTokens(user);
+        } catch {
+            throw new UnauthorizedException();
+        }
+    }
+
+    // Note: Method is not used in controller since we read refresh token from cookie, but kept for completeness
     async refreshToken(token: string) {
         try {
             // Verify refresh token signature & expiration

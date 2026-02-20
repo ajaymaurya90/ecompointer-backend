@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Req, Get } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Req, Res, Get, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -6,6 +6,7 @@ import { JwtGuard } from './jwt.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import type { JwtUser } from './types/jwt-user.type';
 import { AuthGuard } from '@nestjs/passport';
+import type { Request, Response } from 'express';
 
 @Controller('auth')
 export class AuthController {
@@ -18,9 +19,28 @@ export class AuthController {
     }
 
     // Authenticate user and return access + refresh tokens
-    @Post('login')
+
+    /*@Post('login')
     login(@Body() data: LoginDto) {
         return this.authService.login(data);
+    }*/
+    @Post('login')
+    async login(
+        @Body() data: LoginDto,
+        @Res({ passthrough: true }) res: Response,
+    ) {
+        const tokens = await this.authService.login(data);
+
+        res.cookie('refreshToken', tokens.refreshToken, {
+            httpOnly: true,
+            secure: false,       // VERY IMPORTANT for localhost
+            sameSite: 'lax',     // Important for frontend-backend different ports
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        });
+
+        return {
+            accessToken: tokens.accessToken,
+        };
     }
 
     // Protected route to fetch authenticated user profile
@@ -30,17 +50,50 @@ export class AuthController {
         return req.user;
     }
 
-    // Exchange valid refresh token for new access + refresh tokens
+    // Refresh access token using refresh token cookie
     @Post('refresh')
-    async refresh(@Body('refreshToken') refreshToken: string) {
-        return this.authService.refreshToken(refreshToken);
+    async refresh(
+        @Req() req: Request,
+        @Res({ passthrough: true }) res: Response
+    ) {
+        const refreshToken = req.cookies?.refreshToken;
+
+        if (!refreshToken) {
+            throw new UnauthorizedException();
+        }
+
+        const tokens = await this.authService.refresh(refreshToken);
+
+        // Set new refresh token as cookie
+        res.cookie('refreshToken', tokens.refreshToken, {
+            httpOnly: true,
+            secure: false,
+            sameSite: 'lax',
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+        });
+
+        return {
+            accessToken: tokens.accessToken,
+        };
     }
 
     // Logout user by invalidating stored refresh token
     @UseGuards(AuthGuard('jwt'))
     @Post('logout')
-    async logout(@CurrentUser() user: JwtUser) {
-        return this.authService.logout(user.id);
+    async logout(
+        @CurrentUser() user: JwtUser,
+        @Res({ passthrough: true }) res: Response,
+    ) {
+        await this.authService.logout(user.id);
+
+        // Clear refresh token cookie
+        res.clearCookie('refreshToken', {
+            httpOnly: true,
+            secure: false,
+            sameSite: 'lax',
+        });
+
+        return { message: 'Logged out successfully' };
     }
 
 }
