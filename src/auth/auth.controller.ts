@@ -56,9 +56,12 @@ export class AuthController {
         @Req() req: Request,
         @Res({ passthrough: true }) res: Response
     ) {
+
+        console.log("Cookies:", req.cookies);
         const refreshToken = req.cookies?.refreshToken;
 
         if (!refreshToken) {
+            console.log("No refresh token found");
             throw new UnauthorizedException();
         }
 
@@ -71,9 +74,11 @@ export class AuthController {
             sameSite: 'lax',
             maxAge: 7 * 24 * 60 * 60 * 1000,
         });
+        console.log("response:", tokens.accessToken, tokens.user);
 
         return {
             accessToken: tokens.accessToken,
+            user: tokens.user,
         };
     }
 

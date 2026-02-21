@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -101,32 +101,64 @@ export class AuthService {
     }
 
     async refresh(refreshToken: string) {
-        try {
-            const payload = this.jwtService.verify(refreshToken, {
-                secret: process.env.JWT_REFRESH_SECRET,
-            });
+        const payload = this.jwtService.verify(refreshToken, {
+            secret: process.env.JWT_REFRESH_SECRET,
+        });
 
-            const user = await this.prisma.brandOwner.findUnique({
-                where: { id: payload.sub },
-            });
+        const user = await this.prisma.brandOwner.findUnique({
+            where: { id: payload.sub },
+        });
 
-            if (!user || !user.refreshToken) {
-                throw new UnauthorizedException();
-            }
-
-            const isMatch = await bcrypt.compare(
-                refreshToken,
-                user.refreshToken,
-            );
-
-            if (!isMatch) {
-                throw new UnauthorizedException();
-            }
-
-            return this.generateTokens(user);
-        } catch {
-            throw new UnauthorizedException();
+        if (!user) {
+            throw new UnauthorizedException('User not found');
         }
+
+        if (!user.refreshToken) {
+            throw new ForbiddenException('Access denied');
+        }
+        const isMatch = await bcrypt.compare(
+            refreshToken,
+            user.refreshToken
+        );
+
+        if (!isMatch) {
+            throw new UnauthorizedException('refresh token mismatch');
+        }
+
+        const newAccessToken = this.jwtService.sign(
+            {
+                sub: user.id,
+                email: user.email,
+                role: user.role,
+            },
+            {
+                secret: process.env.JWT_ACCESS_SECRET,
+                expiresIn: "15m",
+            },
+        );
+
+        const newRefreshToken = this.jwtService.sign(
+            { sub: user.id },
+            {
+                secret: process.env.JWT_REFRESH_SECRET,
+                expiresIn: "7d",
+            },
+        );
+
+        await this.prisma.brandOwner.update({
+            where: { id: user.id },
+            data: { refreshToken: newRefreshToken },
+        });
+
+        return {
+            accessToken: newAccessToken,
+            refreshToken: newRefreshToken,
+            user: {
+                id: user.id,
+                email: user.email,
+                role: user.role,
+            },
+        };
     }
 
     // Note: Method is not used in controller since we read refresh token from cookie, but kept for completeness
