@@ -22,15 +22,19 @@
  * - Controller remains thin (no business logic here)
  * ---------------------------------------------------------
  */
-import { Controller, Post, Body, Req, Get, Param, ParseUUIDPipe, Query, Patch, Delete } from '@nestjs/common';
+import { Controller, Post, Body, Req, Get, Param, ParseUUIDPipe, Query, Patch, Delete, UseGuards } from '@nestjs/common';
 import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiParam } from '@nestjs/swagger';
+import { RolesGuard } from 'src/auth/guards/roles.guard';
+import { JwtGuard } from 'src/auth/jwt.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { Role } from '@prisma/client';
 
+@UseGuards(JwtGuard, RolesGuard)
 @Controller('products')
 @ApiTags('Products')
-@Controller('products')
 export class ProductController {
     constructor(private readonly service: ProductService) { }
 
@@ -44,9 +48,10 @@ export class ProductController {
     @ApiOperation({ summary: 'Create a new product' })
     @ApiResponse({ status: 201, description: 'Product created successfully' })
     @Post()
-    create(@Body() dto: CreateProductDto) {
+    @Roles(Role.BRAND_OWNER)
+    create(@Req() req, @Body() dto: CreateProductDto) {
         // Temporary: bypass owner validation
-        return this.service.create(dto);
+        return this.service.create(dto, req.user);
     }
 
     /**
@@ -62,10 +67,18 @@ export class ProductController {
 
     @ApiOperation({ summary: 'Get product by ID' })
     @ApiParam({ name: 'id', description: 'Product UUID' })
+    @Roles(Role.BRAND_OWNER, Role.SHOP_OWNER)
     @Get(':id')
+    findOne(
+        @Req() req,
+        @Param('id', new ParseUUIDPipe()) id: string,
+    ) {
+        return this.service.findOne(id, req.user);
+    }
+    /*@Get(':id')
     findOne(@Param('id', new ParseUUIDPipe()) id: string) {
         return this.service.findOne(id);
-    }
+    }*/
 
     /**
    * Get paginated list of products
@@ -85,7 +98,25 @@ export class ProductController {
     @ApiQuery({ name: 'page', required: false })
     @ApiQuery({ name: 'limit', required: false })
     @ApiQuery({ name: 'brandId', required: false })
+    @Roles(Role.BRAND_OWNER, Role.SHOP_OWNER)
     @Get()
+    findAll(
+        @Req() req,
+        @Query('page') page?: string,
+        @Query('limit') limit?: string,
+        @Query('search') search?: string,
+        @Query('categoryId') categoryId?: string,
+        @Query('sortBy') sortBy?: string,
+        @Query('order') order?: 'asc' | 'desc',
+    ) {
+        return this.service.findAll(
+            req.user,
+            Number(page) || 1,
+            Number(limit) || 10,
+            { search, categoryId, sortBy, order }
+        );
+    }
+    /*@Get()
     findAll(
         @Query('page') page?: string,
         @Query('limit') limit?: string,
@@ -96,7 +127,7 @@ export class ProductController {
             Number(limit) || 10,
             brandId,
         );
-    }
+    }*/
 
     /**
    * Update product details
@@ -106,11 +137,13 @@ export class ProductController {
    * - Business validation handled in service
    */
     @Patch(':id')
+    @Roles(Role.BRAND_OWNER)
     update(
+        @Req() req,
         @Param('id', new ParseUUIDPipe()) id: string,
         @Body() dto: UpdateProductDto,
     ) {
-        return this.service.update(id, dto);
+        return this.service.update(id, dto, req.user);
     }
 
     /**
@@ -121,8 +154,11 @@ export class ProductController {
    * - No hard delete performed
    */
     @Delete(':id')
-    remove(@Param('id', new ParseUUIDPipe()) id: string) {
-        return this.service.remove(id);
+    @Roles(Role.BRAND_OWNER)
+    remove(
+        @Req() req,
+        @Param('id', new ParseUUIDPipe()) id: string) {
+        return this.service.remove(id, req.user);
     }
 
 }

@@ -72,7 +72,15 @@ export class AuthService {
             },
         });
 
-        return tokens;
+        return {
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken,
+            user: {
+                id: user.id,
+                email: user.email,
+                role: user.role,
+            },
+        };
     }
 
 

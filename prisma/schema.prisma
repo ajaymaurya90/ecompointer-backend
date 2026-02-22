@@ -26,8 +26,13 @@ enum PaymentStatus {
 }
 
 enum Role {
+  BRAND_OWNER
+  SHOP_OWNER
+  SUPER_ADMIN
+  CUSTOMER
   USER
   ADMIN
+
 }
 
 //////////////////////////////

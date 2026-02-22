@@ -29,9 +29,9 @@ export class AuthController {
         @Body() data: LoginDto,
         @Res({ passthrough: true }) res: Response,
     ) {
-        const tokens = await this.authService.login(data);
+        const result = await this.authService.login(data);
 
-        res.cookie('refreshToken', tokens.refreshToken, {
+        res.cookie('refreshToken', result.refreshToken, {
             httpOnly: true,
             secure: false,       // VERY IMPORTANT for localhost
             sameSite: 'lax',     // Important for frontend-backend different ports
@@ -39,7 +39,8 @@ export class AuthController {
         });
 
         return {
-            accessToken: tokens.accessToken,
+            accessToken: result.accessToken,
+            user: result.user
         };
     }
 
@@ -56,13 +57,10 @@ export class AuthController {
         @Req() req: Request,
         @Res({ passthrough: true }) res: Response
     ) {
-
-        console.log("Cookies:", req.cookies);
         const refreshToken = req.cookies?.refreshToken;
 
         if (!refreshToken) {
-            console.log("No refresh token found");
-            throw new UnauthorizedException();
+            throw new UnauthorizedException("No refresh token found");
         }
 
         const tokens = await this.authService.refresh(refreshToken);
@@ -74,7 +72,6 @@ export class AuthController {
             sameSite: 'lax',
             maxAge: 7 * 24 * 60 * 60 * 1000,
         });
-        console.log("response:", tokens.accessToken, tokens.user);
 
         return {
             accessToken: tokens.accessToken,

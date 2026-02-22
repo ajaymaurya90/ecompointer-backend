@@ -4,6 +4,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
+import { RolesGuard } from './guards/roles.guard';
+import { JwtGuard } from './jwt.guard';
 
 // AuthModule handles authentication, JWT setup, and related services
 @Module({
@@ -22,7 +24,15 @@ import { JwtStrategy } from './jwt.strategy';
   // Registers authentication routes
   controllers: [AuthController],
   // Provides auth logic and JWT validation strategy
-  providers: [AuthService, JwtStrategy],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    JwtGuard,
+    RolesGuard,
+  ],
+  exports: [
+    JwtGuard,
+    RolesGuard,
+  ],
 })
 export class AuthModule { }
-
