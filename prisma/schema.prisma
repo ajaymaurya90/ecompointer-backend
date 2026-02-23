@@ -319,6 +319,7 @@ enum MediaType {
   THUMBNAIL
   GALLERY
   ZOOM
+  VIDEO
 }
 
 model Media {
@@ -334,6 +335,8 @@ model Media {
   altText    String?
 
   type       MediaType @default(GALLERY)
+  size       Int?
+  mimeType   String?
   isPrimary  Boolean   @default(false)
   sortOrder  Int       @default(0)
 

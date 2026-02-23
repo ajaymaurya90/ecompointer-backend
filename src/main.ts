@@ -2,12 +2,13 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
 
   // Create NestJS application instance
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // Use cookie parser middleware to handle cookies (for refresh tokens)
   app.use(cookieParser());
@@ -26,6 +27,11 @@ async function bootstrap() {
       transform: true,              // Auto-transform payloads to DTO types
     }),
   );
+
+  // Serve uploaded media files from the 'uploads' directory at the '/uploads' URL path
+  app.useStaticAssets('uploads', {
+    prefix: '/uploads/',
+  });
 
   // Configure Swagger API documentation
   const config = new DocumentBuilder()

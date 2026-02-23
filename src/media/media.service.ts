@@ -1,31 +1,8 @@
-/**
- * ---------------------------------------------------------
- * MEDIA SERVICE
- * ---------------------------------------------------------
- * Primary Responsibilities:
- *
- * 1. Attach media to either:
- *      - Product
- *      - Product Variant
- * 2. Enforce strict ownership rules (cannot belong to both)
- * 3. Maintain exactly ONE primary media per parent
- * 4. Prevent removal of the only primary media
- * 5. Auto-assign primary when none exists
- * 6. Maintain media ordering (sortOrder)
- *
- * Business Rules:
- * - Media must belong to either product OR variant (never both)
- * - Only one active primary media per parent
- * - Cannot disable the only primary image
- * - Soft-state consistency maintained via transactions
- *
- * Designed for scalable e-commerce media management.
- * ---------------------------------------------------------
- */
 import {
     Injectable,
     BadRequestException,
     NotFoundException,
+    ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateMediaDto } from './dto/create-media.dto';
@@ -35,87 +12,86 @@ import { UpdateMediaDto } from './dto/update-media.dto';
 export class MediaService {
     constructor(private prisma: PrismaService) { }
 
-    /**
-   * Create new media entry
-   *
-   * Flow:
-   * Validate ownership (product OR variant)
-   * Validate parent existence
-   * Reset existing primary (if needed)
-   * Create media
-   * Ensure at least one primary exists
-   */
-    async create(dto: CreateMediaDto) {
-        // Ownership validation: Must belong to product OR variant
+    // =============================
+    // CREATE MEDIA
+    // =============================
+    async create(dto: CreateMediaDto, userId: string) {
         if (!dto.productId && !dto.variantId) {
-            throw new BadRequestException(
-                'Media must belong to product or variant',
-            );
+            throw new BadRequestException('Media must belong to product or variant');
         }
 
         if (dto.productId && dto.variantId) {
-            throw new BadRequestException(
-                'Media cannot belong to both product and variant',
-            );
+            throw new BadRequestException('Cannot belong to both product and variant');
         }
 
-        // Validate parent existence
+        // Validate product ownership
         if (dto.productId) {
-            const product = await this.prisma.product.findUnique({
-                where: { id: dto.productId },
+            const product = await this.prisma.product.findFirst({
+                where: {
+                    id: dto.productId,
+                    brandOwner: {
+                        userId: userId,
+                    },
+                },
             });
 
             if (!product) {
-                throw new NotFoundException('Product not found');
+                throw new ForbiddenException('You do not own this product');
             }
         }
 
+        // Validate variant ownership
         if (dto.variantId) {
-            const variant = await this.prisma.productVariant.findUnique({
-                where: { id: dto.variantId },
+            const variant = await this.prisma.productVariant.findFirst({
+                where: {
+                    id: dto.variantId,
+                    product: {
+                        brandOwner: {
+                            userId: userId,
+                        },
+                    },
+                },
             });
 
             if (!variant) {
-                throw new NotFoundException('Variant not found');
+                throw new ForbiddenException('You do not own this variant');
             }
         }
 
-        // If primary, reset existing primary
+        const parentFilter = dto.productId
+            ? { productId: dto.productId }
+            : { variantId: dto.variantId };
+
+        // Auto assign sortOrder
+        const lastMedia = await this.prisma.media.findFirst({
+            where: parentFilter,
+            orderBy: { sortOrder: 'desc' },
+        });
+
+        const nextSort = lastMedia ? lastMedia.sortOrder + 1 : 1;
+
+        // Reset existing primary if new primary
         if (dto.isPrimary) {
             await this.prisma.media.updateMany({
-                where: {
-                    productId: dto.productId ?? undefined,
-                    variantId: dto.variantId ?? undefined,
-                    isPrimary: true,
-                },
+                where: { ...parentFilter },
                 data: { isPrimary: false },
             });
         }
 
-        // Create media record
         const created = await this.prisma.media.create({
             data: {
-                productId: dto.productId,
-                variantId: dto.variantId,
+                ...parentFilter,
                 url: dto.url,
                 altText: dto.altText,
-                type: dto.type,
+                type: dto.type ?? 'GALLERY',
                 isPrimary: dto.isPrimary ?? false,
-                sortOrder: dto.sortOrder ?? 0,
-            }
+                sortOrder: dto.sortOrder ?? nextSort,
+            },
         });
 
         // Ensure at least one primary exists
-        const parentFilter = created.productId
-            ? { productId: created.productId }
-            : { variantId: created.variantId };
-
         const primaryExists = await this.prisma.media.findFirst({
-            where: {
-                ...parentFilter,
-                isPrimary: true,
-                isActive: true,
-            },
+            where: { ...parentFilter, isPrimary: true, isActive: true },
         });
 
         if (!primaryExists) {
@@ -126,101 +102,89 @@ export class MediaService {
         }
 
         return created;
-
     }
 
-    /**
-   * Update media entry
-   *
-   * Rules enforced:
-   * - Cannot disable the only primary image
-   * - If setting new primary → reset others
-   * - If no primary remains → auto assign oldest active
-   *
-   * Uses transaction for consistency.
-   */
-    async update(id: string, updateMediaDto: UpdateMediaDto) {
+    // =============================
+    // UPDATE MEDIA
+    // =============================
+    async update(id: string, dto: UpdateMediaDto, userId: string) {
         const media = await this.prisma.media.findUnique({
             where: { id },
+            include: {
+                product: { include: { brandOwner: true } },
+                variant: {
+                    include: {
+                        product: { include: { brandOwner: true } },
+                    },
+                },
+            },
         });
 
-        if (!media) {
-            throw new NotFoundException('Media not found');
+        if (!media) throw new NotFoundException('Media not found');
+
+        const ownerUserId =
+            media.product?.brandOwner?.userId ||
+            media.variant?.product?.brandOwner?.userId;
+
+        if (ownerUserId !== userId) {
+            throw new ForbiddenException('You do not own this media');
         }
 
+        const parentFilter = media.productId
+            ? { productId: media.productId }
+            : { variantId: media.variantId };
+
         return this.prisma.$transaction(async (tx) => {
-            const parentFilter = media.productId
-                ? { productId: media.productId }
-                : { variantId: media.variantId };
-
-            // Prevent disabling ONLY primary
-            if (
-                media.isPrimary &&
-                (updateMediaDto.isPrimary === false ||
-                    updateMediaDto.isActive === false)
-            ) {
-                const otherPrimary = await tx.media.findFirst({
-                    where: {
-                        ...parentFilter,
-                        isPrimary: true,
-                        isActive: true,
-                        NOT: { id },
-                    },
-                });
-
-                if (!otherPrimary) {
-                    throw new BadRequestException(
-                        'Cannot disable the only primary image. Assign another primary first.',
-                    );
-                }
-            }
-
-            // Assign new primary if requested
-            if (updateMediaDto.isPrimary === true) {
+            if (dto.isPrimary === true) {
                 await tx.media.updateMany({
-                    where: {
-                        ...parentFilter,
-                        NOT: { id },
-                    },
+                    where: parentFilter,
                     data: { isPrimary: false },
                 });
             }
 
             const updated = await tx.media.update({
                 where: { id },
-                data: updateMediaDto,
+                data: dto,
             });
-
-            // Auto assign primary if none exists
-            const primaryExists = await tx.media.findFirst({
-                where: {
-                    ...parentFilter,
-                    isPrimary: true,
-                    isActive: true,
-                },
-            });
-
-            if (!primaryExists) {
-                const firstMedia = await tx.media.findFirst({
-                    where: {
-                        ...parentFilter,
-                        isActive: true,
-                    },
-                    orderBy: { createdAt: 'asc' },
-                });
-
-                if (firstMedia) {
-                    await tx.media.update({
-                        where: { id: firstMedia.id },
-                        data: { isPrimary: true },
-                    });
-                }
-            }
 
             return updated;
         });
     }
 
+    // =============================
+    // FETCH MEDIA
+    // =============================
+    async getProductMedia(productId: string, userId: string) {
+        const product = await this.prisma.product.findFirst({
+            where: {
+                id: productId,
+                brandOwner: { userId },
+            },
+        });
 
+        if (!product) throw new ForbiddenException();
 
+        return this.prisma.media.findMany({
+            where: { productId, isActive: true },
+            orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }],
+        });
+    }
+
+    async getVariantMedia(variantId: string, userId: string) {
+        const variant = await this.prisma.productVariant.findFirst({
+            where: {
+                id: variantId,
+                product: {
+                    brandOwner: { userId },
+                },
+            },
+        });
+
+        if (!variant) throw new ForbiddenException();
+
+        return this.prisma.media.findMany({
+            where: { variantId, isActive: true },
+            orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }],
+        });
+    }
 }
