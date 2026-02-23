@@ -215,5 +215,100 @@ export class ProductVariantService {
         });
     }
 
+    async findAll(productId: string, user: any) {
+        await this.validateBrandOwnership(productId, user);
+
+        return this.prisma.productVariant.findMany({
+            where: {
+                productId,
+                isActive: true,
+            },
+            orderBy: { createdAt: 'asc' },
+        });
+    }
+
+    async getSummary(productId: string, user: any) {
+        await this.validateBrandOwnership(productId, user);
+
+        const variants = await this.prisma.productVariant.findMany({
+            where: {
+                productId,
+                isActive: true,
+            },
+            select: {
+                stock: true,
+                retailGross: true,
+            },
+        });
+
+        const totalStock = variants.reduce((sum, v) => sum + v.stock, 0);
+
+        const prices = variants.map(v => v.retailGross);
+
+        const minPrice = prices.length ? Math.min(...prices) : 0;
+        const maxPrice = prices.length ? Math.max(...prices) : 0;
+
+        return {
+            totalVariants: variants.length,
+            totalStock,
+            priceRange: {
+                min: minPrice,
+                max: maxPrice,
+            },
+        };
+    }
+
+    async adjustStock(variantId: string, quantity: number) {
+        const variant = await this.prisma.productVariant.findUnique({
+            where: { id: variantId },
+        });
+
+        if (!variant || !variant.isActive) {
+            throw new NotFoundException('Variant not found');
+        }
+
+        if (variant.stock + quantity < 0) {
+            throw new BadRequestException('Insufficient stock');
+        }
+
+        return this.prisma.productVariant.update({
+            where: { id: variantId },
+            data: {
+                stock: {
+                    increment: quantity,
+                },
+            },
+        });
+    }
+
+    private async validateBrandOwnership(productId: string, user: any) {
+        const product = await this.prisma.product.findUnique({
+            where: { id: productId },
+            select: {
+                brandOwner: {
+                    select: {
+                        userId: true,
+                    },
+                },
+            },
+        });
+
+        if (!product) {
+            throw new NotFoundException('Product not found');
+        }
+
+        if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
+            return;
+        }
+
+        if (
+            user.role === 'BRAND_OWNER' &&
+            product.brandOwner.userId === user.sub
+        ) {
+            return;
+        }
+
+        throw new BadRequestException('Access denied');
+    }
 
 }

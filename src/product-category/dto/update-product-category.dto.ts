@@ -23,4 +23,12 @@ export class UpdateProductCategoryDto {
     @IsOptional()
     @IsString()
     name?: string;
+
+    @ApiPropertyOptional({
+        example: 'Updated Sub Category Name',
+        description: 'New name for the product Sub category',
+    })
+    @IsOptional()
+    @IsString()
+    parentId?: any;
 }

@@ -27,7 +27,7 @@ export class CreateProductCategoryDto {
         description: 'UUID of the brand this category belongs to',
     })
     @IsUUID()
-    brandId: string;
+    brandOwnerId: string;
 
     @ApiPropertyOptional({
         example: '660e8400-e29b-41d4-a716-446655440111',
@@ -37,4 +37,5 @@ export class CreateProductCategoryDto {
     @IsOptional()
     @IsUUID()
     parentId?: string;
+
 }

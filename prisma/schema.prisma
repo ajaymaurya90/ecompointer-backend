@@ -30,8 +30,6 @@ enum Role {
   SHOP_OWNER
   SUPER_ADMIN
   CUSTOMER
-  USER
-  ADMIN
 
 }
 
@@ -39,29 +37,56 @@ enum Role {
 // CORE USERS
 //////////////////////////////
 
-model BrandOwner {
+model User {
   id        String  @id @default(uuid())
-  brandName String
   email     String  @unique
+  firstName  String
+  lastName   String?
+  phone      String   @unique
   password  String
-  phone     String?
-  logoUrl   String?
-  address   String?
+  role      Role
   isActive  Boolean @default(true)
 
-  brands    ProductBrand[]
-  shopLinks BrandOwnerShop[]
-  orders    Order[]
+  brandOwner BrandOwner?
+  shopOwner  ShopOwner?
 
-  role         Role    @default(USER)
-  language     String? @default("en")
   refreshToken String?
   tokenVersion Int     @default(0)
+
+  isDeleted Boolean @default(false)
+  deletedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([email])
+}
+
+model BrandOwner {
+  id        String  @id @default(uuid())
+  businessName String
+  phone     String?
+  gstNumber   String?
+  address     String?
+  state       String?
+  city        String?
+  country     String?
+  logoUrl   String?
+  isActive  Boolean @default(true)
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  brands    ProductBrand[]
+  categories ProductCategory[]
+  products  Product[]
+  shopLinks BrandOwnerShop[]
+  orders    Order[]
+
+  language String? @default("en")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model ShopOwner {
@@ -75,6 +100,9 @@ model ShopOwner {
   qrCodeUrl String?
   isActive  Boolean @default(true)
   language  String? @default("en")
+
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   brandLinks BrandOwnerShop[]
   orders     Order[]
@@ -118,7 +146,6 @@ model ProductBrand {
   ownerId String
   owner   BrandOwner @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
-  categories ProductCategory[]
   products   Product[]
 
   @@index([ownerId])
@@ -127,9 +154,10 @@ model ProductBrand {
 model ProductCategory {
   id   String @id @default(uuid())
   name String
+  description   String?
 
-  brandId String
-  brand   ProductBrand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  brandOwnerId  String
+  brandOwner    BrandOwner @relation(fields: [brandOwnerId], references: [id])
 
   // Self-referencing hierarchy
   parentId String?
@@ -144,8 +172,8 @@ model ProductCategory {
   updatedAt DateTime @updatedAt
 
   // Prevent duplicate category names at same level under same brand
-  @@unique([brandId, name, parentId])
-  @@index([brandId])
+  @@unique([brandOwnerId, name, parentId])
+  @@index([brandOwnerId])
   @@index([parentId])
 }
 
@@ -156,6 +184,9 @@ model Product {
 
   brandId String
   brand   ProductBrand @relation(fields: [brandId], references: [id])
+
+  brandOwnerId  String
+  brandOwner    BrandOwner @relation(fields: [brandOwnerId], references: [id])
 
   categoryId String
   category   ProductCategory @relation(fields: [categoryId], references: [id])

@@ -36,4 +36,5 @@ export class UpdateProductDto {
     @IsOptional()
     @IsUUID()
     categoryId?: string;
+    brandId: any;
 }

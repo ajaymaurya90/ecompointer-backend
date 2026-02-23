@@ -1,10 +1,12 @@
-import { Injectable, UnauthorizedException, ConflictException, ForbiddenException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import { BrandOwner } from '@prisma/client';
+import { User, Role } from '@prisma/client';
+import { ProfileResponseDto } from './dto/profile-response.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 
 @Injectable()
 export class AuthService {
@@ -15,35 +17,58 @@ export class AuthService {
 
     async register(data: RegisterDto) {
         // Check if email already exists
-        const existing = await this.prisma.brandOwner.findUnique({
+        const existingEmail = await this.prisma.user.findUnique({
             where: { email: data.email },
         });
 
-        // Prevent duplicate registrations
-        if (existing) {
+        if (existingEmail) {
             throw new ConflictException('Email already exists');
         }
 
-        // Hash password before storing in database
-        const hashedPassword = await bcrypt.hash(data.password, 10);
-
-        // Create new brand owner record
-        const user = await this.prisma.brandOwner.create({
-            data: {
-                email: data.email,
-                password: hashedPassword,
-                brandName: data.brandName,
-            },
+        // Check if phone already exists
+        const existingPhone = await this.prisma.user.findUnique({
+            where: { phone: data.phone },
         });
 
-        return { message: 'Registered successfully', userId: user.id };
+        if (existingPhone) {
+            throw new ConflictException('Phone number already exists');
+        }
+
+        // Hash password
+        const hashedPassword = await bcrypt.hash(data.password, 10);
+
+        return this.prisma.$transaction(async (tx) => {
+
+            // Create User (Human Identity)
+            const user = await tx.user.create({
+                data: {
+                    email: data.email,
+                    password: hashedPassword,
+                    role: Role.BRAND_OWNER,
+                    firstName: data.firstName,
+                    lastName: data.lastName,
+                    phone: data.phone,
+                },
+            });
+
+            // Create BrandOwner (Business Entity)
+            await tx.brandOwner.create({
+                data: {
+                    businessName: data.businessName,
+                    userId: user.id,
+                },
+            });
+
+            return {
+                message: 'Registered successfully',
+                userId: user.id,
+            };
+        });
     }
-
-
 
     async login(data: LoginDto) {
         // Find user by email and Reject if user not found
-        const user = await this.prisma.brandOwner.findUnique({
+        const user = await this.prisma.user.findUnique({
             where: { email: data.email },
         });
 
@@ -65,7 +90,7 @@ export class AuthService {
         const hashedRefresh = await bcrypt.hash(tokens.refreshToken, 10);
 
         // Store hashed refresh token
-        await this.prisma.brandOwner.update({
+        await this.prisma.user.update({
             where: { id: user.id },
             data: {
                 refreshToken: hashedRefresh,
@@ -83,12 +108,140 @@ export class AuthService {
         };
     }
 
+    async getUserProfile(userId: string): Promise<ProfileResponseDto> {
 
-    private async generateTokens(user: BrandOwner) {
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            include: {
+                brandOwner: true,
+            },
+        });
+
+        if (!user) {
+            throw new NotFoundException('User not found');
+        }
+
+        // Base user info
+        const baseProfile: ProfileResponseDto = {
+            id: user.id,
+            email: user.email,
+            role: user.role,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            phone: user.phone,
+            createdAt: user.createdAt,
+            business: null,
+        };
+
+        // If BRAND_OWNER → attach business
+        if (user.role === 'BRAND_OWNER' && user.brandOwner) {
+            baseProfile.business = {
+                id: user.brandOwner.id,
+                businessName: user.brandOwner.businessName,
+            };
+        }
+
+        // SUPER_ADMIN → business remains null
+
+        return baseProfile;
+    }
+
+    // Allow users to update their own profile, and admins to update any profile
+    async updateUserProfile(
+        currentUserId: string,
+        currentUserRole: string,
+        targetUserId: string,
+        dto: UpdateProfileDto
+    ) {
+
+        // If not SUPER_ADMIN → can only update self
+        if (currentUserRole !== 'SUPER_ADMIN' && currentUserId !== targetUserId) {
+            throw new ForbiddenException('You can only update your own profile');
+        }
+
+        const user = await this.prisma.user.findUnique({
+            where: { id: targetUserId },
+            include: { brandOwner: true },
+        });
+
+        if (!user) {
+            throw new NotFoundException('User not found');
+        }
+
+        // Update user table
+        await this.prisma.user.update({
+            where: { id: targetUserId },
+            data: {
+                firstName: dto.firstName,
+                lastName: dto.lastName,
+                phone: dto.phone,
+            },
+        });
+
+        // If user is BRAND_OWNER and businessName provided
+        if (user.role === 'BRAND_OWNER' && dto.businessName) {
+            await this.prisma.brandOwner.update({
+                where: { userId: targetUserId },
+                data: {
+                    businessName: dto.businessName,
+                },
+            });
+        }
+
+        return { message: 'Profile updated successfully' };
+    }
+
+    // Admin can view all non-admin users with pagination
+    async getAllUsers(page: number, limit: number) {
+
+        const skip = (page - 1) * limit;
+
+        const [users, total] = await this.prisma.$transaction([
+            this.prisma.user.findMany({
+                where: {
+                    role: { not: 'SUPER_ADMIN' },
+                },
+                include: { brandOwner: true },
+                skip,
+                take: limit,
+                orderBy: { createdAt: 'desc' },
+            }),
+            this.prisma.user.count({
+                where: {
+                    role: { not: 'SUPER_ADMIN' },
+                },
+            }),
+        ]);
+
+        return {
+            data: users,
+            meta: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
+            },
+        };
+    }
+
+    // Soft delete user by setting isDeleted flag and deletedAt timestamp
+    async softDeleteUser(userId: string) {
+        await this.prisma.user.update({
+            where: { id: userId },
+            data: {
+                isDeleted: true,
+                deletedAt: new Date(),
+            },
+        });
+
+        return { message: 'User deleted successfully' };
+    }
+
+    // Helper method to generate access and refresh tokens
+    private async generateTokens(user: User) {
         // Create JWT payload (includes version for rotation security)
         const payload = {
             sub: user.id,
-            email: user.email,
             role: user.role,
             version: user.tokenVersion,
         };
@@ -113,7 +266,7 @@ export class AuthService {
             secret: process.env.JWT_REFRESH_SECRET,
         });
 
-        const user = await this.prisma.brandOwner.findUnique({
+        const user = await this.prisma.user.findUnique({
             where: { id: payload.sub },
         });
 
@@ -153,9 +306,10 @@ export class AuthService {
             },
         );
 
-        await this.prisma.brandOwner.update({
+        const hashedRefresh = await bcrypt.hash(newRefreshToken, 10);
+        await this.prisma.user.update({
             where: { id: user.id },
-            data: { refreshToken: newRefreshToken },
+            data: { refreshToken: hashedRefresh },
         });
 
         return {
@@ -178,7 +332,7 @@ export class AuthService {
             });
 
             // Fetch user from database
-            const user = await this.prisma.brandOwner.findUnique({
+            const user = await this.prisma.user.findUnique({
                 where: { id: payload.sub },
             });
 
@@ -199,7 +353,7 @@ export class AuthService {
             }
 
             // Increment tokenVersion to invalidate old tokens
-            await this.prisma.brandOwner.update({
+            await this.prisma.user.update({
                 where: { id: user.id },
                 data: {
                     tokenVersion: { increment: 1 },
@@ -207,7 +361,7 @@ export class AuthService {
             });
 
             // Reload updated user (required to get new version)
-            const updatedUser = await this.prisma.brandOwner.findUnique({
+            const updatedUser = await this.prisma.user.findUnique({
                 where: { id: user.id },
             });
 
@@ -221,7 +375,7 @@ export class AuthService {
             // Hash and store new refresh token
             const hashedRefresh = await bcrypt.hash(tokens.refreshToken, 10);
 
-            await this.prisma.brandOwner.update({
+            await this.prisma.user.update({
                 where: { id: user.id },
                 data: {
                     refreshToken: hashedRefresh,
@@ -237,7 +391,7 @@ export class AuthService {
 
     async logout(userId: string) {
         // Remove stored refresh token to fully invalidate session
-        await this.prisma.brandOwner.update({
+        await this.prisma.user.update({
             where: { id: userId },
             data: { refreshToken: null },
         });

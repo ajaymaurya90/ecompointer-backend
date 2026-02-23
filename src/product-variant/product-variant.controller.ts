@@ -27,12 +27,17 @@
  * - UUID validation enforced via ParseUUIDPipe
  * ---------------------------------------------------------
  */
-import { Controller, Post, Body, Param, ParseUUIDPipe, Patch, Delete } from '@nestjs/common';
+import { Controller, Post, Body, Param, ParseUUIDPipe, Patch, Delete, Get, UseGuards, Req } from '@nestjs/common';
 import { ProductVariantService } from './product-variant.service';
 import { CreateProductVariantDto } from './dto/create-product-variant.dto';
 import { UpdateProductVariantDto } from './dto/update-product-variant.dto';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiParam } from '@nestjs/swagger';
+import { JwtGuard } from 'src/auth/jwt.guard';
+import { Roles } from 'src/auth/decorators/roles.decorator';
+import { RolesGuard } from 'src/auth/guards/roles.guard';
+import { Role } from '@prisma/client';
 
+@UseGuards(JwtGuard, RolesGuard)
 @Controller('products/:productId/variants')
 @ApiTags('Product Variants')
 export class ProductVariantController {
@@ -46,6 +51,7 @@ export class ProductVariantController {
    */
     @ApiOperation({ summary: 'Create variant for a product' })
     @ApiParam({ name: 'productId', description: 'Product UUID' })
+    @Roles(Role.BRAND_OWNER)
     @Post()
     create(
         @Param('productId', new ParseUUIDPipe()) productId: string,
@@ -53,6 +59,8 @@ export class ProductVariantController {
     ) {
         return this.service.create(productId, dto);
     }
+
+
 
     /**
    * Update variant details
@@ -62,6 +70,7 @@ export class ProductVariantController {
    */
     @ApiOperation({ summary: 'Update product variant' })
     @ApiParam({ name: 'variantId', description: 'Variant UUID' })
+    @Roles(Role.BRAND_OWNER)
     @Patch(':variantId')
     update(
         @Param('variantId', new ParseUUIDPipe()) variantId: string,
@@ -78,9 +87,34 @@ export class ProductVariantController {
    */
     @ApiOperation({ summary: 'Delete product variant' })
     @ApiParam({ name: 'variantId', description: 'Variant UUID' })
+    @Roles(Role.BRAND_OWNER)
     @Delete(':variantId')
     remove(@Param('variantId', new ParseUUIDPipe()) variantId: string) {
         return this.service.remove(variantId);
+    }
+
+    /**
+ * List all active variants for a product
+ */
+    @Roles(Role.BRAND_OWNER, Role.SHOP_OWNER, Role.SUPER_ADMIN)
+    @Get()
+    findAll(
+        @Param('productId', new ParseUUIDPipe()) productId: string,
+        @Req() req,
+    ) {
+        return this.service.findAll(productId, req.user);
+    }
+
+    /**
+ * Get aggregated stock & pricing summary
+ */
+    @Roles(Role.BRAND_OWNER, Role.SHOP_OWNER, Role.SUPER_ADMIN)
+    @Get('summary')
+    getSummary(
+        @Param('productId', new ParseUUIDPipe()) productId: string,
+        @Req() req,
+    ) {
+        return this.service.getSummary(productId, req.user);
     }
 
 }

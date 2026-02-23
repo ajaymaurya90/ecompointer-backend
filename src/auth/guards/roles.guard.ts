@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
+import { Role } from '@prisma/client';
 
 @Injectable()
 // RolesGuard ensures the authenticated user has required role(s)
@@ -16,7 +17,7 @@ export class RolesGuard implements CanActivate {
     canActivate(context: ExecutionContext): boolean {
         // Retrieve roles defined via @Roles() decorator
         // Checks method-level first, then controller-level
-        const requiredRoles = this.reflector.getAllAndOverride<string[]>(
+        const requiredRoles = this.reflector.getAllAndOverride<Role[]>(
             ROLES_KEY,
             [
                 context.getHandler(),   // method
@@ -28,16 +29,14 @@ export class RolesGuard implements CanActivate {
         if (!requiredRoles) {
             return true;
         }
-
-        // Extract user from request (attached by JwtStrategy)
         const request = context.switchToHttp().getRequest();
         const user = request.user;
-
-        // If user's role is not in required roles → deny access
-        if (!requiredRoles.includes(user.role)) {
-            throw new ForbiddenException('Access denied');
+        // If user is not authenticated, deny access
+        if (!user) {
+            throw new ForbiddenException('User not authenticated');
         }
 
-        return true;
+        return requiredRoles.includes(user.role);
+
     }
 }
