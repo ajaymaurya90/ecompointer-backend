@@ -9,6 +9,8 @@ import { CreateProductCategoryDto } from './dto/create-product-category.dto';
 import { UpdateProductCategoryDto } from './dto/update-product-category.dto';
 import { Role } from '@prisma/client';
 import type { JwtUser } from 'src/auth/types/jwt-user.type';
+import { ReorderCategoryDto } from './dto/reorder-category.dto';
+import { ReorderCategoriesDto } from './dto/reorder-categories.dto';
 
 @Injectable()
 export class ProductCategoryService {
@@ -37,13 +39,62 @@ export class ProductCategoryService {
       }
     }
 
+    // Get next position inside same parent
+    const lastSibling = await this.prisma.productCategory.findFirst({
+      where: {
+        brandOwnerId: brandOwner.id,
+        parentId: dto.parentId ?? null,
+      },
+      orderBy: { position: 'desc' },
+    });
+
+    const nextPosition = lastSibling ? lastSibling.position + 1 : 1;
+
     return this.prisma.productCategory.create({
       data: {
         name: dto.name,
-        parentId: dto.parentId,
+        parentId: dto.parentId ?? null,
         brandOwnerId: brandOwner.id,
+        description: dto.description ?? "",
+        position: nextPosition,
       },
     });
+  }
+
+
+  //* =====================================================
+  //   REORDER CATEGORIES
+  //   - Accepts an array of category IDs with their new parentId and position.
+  //   - Validates that categories belong to the user and prevents cycles.
+  //   - Updates all categories in a single transaction for consistency.
+  //* =====================================================
+  async reorder(flatData: { id: string; parentId: string | null; position: number }[], user: JwtUser) {
+    const brandOwner = await this.getBrandOwnerProfile(user);
+
+    // Validate all category IDs belong to the same BrandOwner
+    const categoryIds = flatData.map(d => d.id);
+    const categories = await this.prisma.productCategory.findMany({
+      where: { id: { in: categoryIds }, brandOwnerId: brandOwner.id },
+    });
+
+    if (categories.length !== flatData.length) {
+      throw new BadRequestException('Some categories are invalid or do not belong to the BrandOwner');
+    }
+
+    // Perform updates in a transaction
+    await this.prisma.$transaction(
+      flatData.map(item =>
+        this.prisma.productCategory.update({
+          where: { id: item.id },
+          data: {
+            parentId: item.parentId ?? null,
+            position: item.position,
+          },
+        }),
+      ),
+    );
+
+    return { success: true };
   }
 
   /* =====================================================
@@ -55,15 +106,12 @@ export class ProductCategoryService {
     return this.prisma.productCategory.findMany({
       where: {
         brandOwnerId: { in: ownerIds },
-        parentId: null,
         isActive: true,
       },
-      include: {
-        children: {
-          where: { isActive: true },
-        },
-      },
-      orderBy: { createdAt: 'asc' },
+      orderBy: [
+        { parentId: 'asc' },
+        { position: 'asc' },
+      ],
     });
   }
 

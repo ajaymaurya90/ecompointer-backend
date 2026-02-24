@@ -173,6 +173,7 @@ model ProductCategory {
   children ProductCategory[] @relation("CategoryHierarchy")
 
   products Product[]
+  position Int @default(0)
 
   isActive Boolean @default(true)
 
@@ -183,6 +184,7 @@ model ProductCategory {
   @@unique([brandOwnerId, name, parentId])
   @@index([brandOwnerId])
   @@index([parentId])
+  @@index([parentId, position])
 }
 
 model Product {

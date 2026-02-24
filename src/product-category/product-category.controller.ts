@@ -25,6 +25,8 @@ import { Roles } from 'src/auth/decorators/roles.decorator';
 import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
 import { Role } from '@prisma/client';
 import type { JwtUser } from 'src/auth/types/jwt-user.type';
+import { ReorderCategoryDto } from './dto/reorder-category.dto';
+import { ReorderCategoriesDto } from './dto/reorder-categories.dto';
 
 @ApiTags('Product Categories')
 @UseGuards(JwtGuard, RolesGuard)
@@ -87,4 +89,18 @@ export class ProductCategoryController {
     ) {
         return this.service.remove(id, user);
     }
+
+    /**
+ * Reorder categories (BrandOwner only)
+ */
+    @Roles(Role.BRAND_OWNER)
+    @Post('reorder')
+    async reorderCategories(
+        @Body() payload: { id: string; parentId: string | null; position: number }[],
+        @CurrentUser() user: JwtUser,
+    ) {
+        return this.service.reorder(payload, user);
+    }
 }
+
+
