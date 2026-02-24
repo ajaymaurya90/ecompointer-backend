@@ -111,6 +111,15 @@ export class BrandService {
     async remove(id: string, user: JwtUser) {
         const brand = await this.findOne(id, user); // ownership validated
 
+        const productCount = await this.prisma.product.count({
+            where: { brandId: brand.id },
+        });
+
+        if (productCount > 0) {
+            throw new ForbiddenException(
+                "Cannot delete brand with existing products"
+            );
+        }
         return this.prisma.productBrand.delete({
             where: { id: brand.id },
         });

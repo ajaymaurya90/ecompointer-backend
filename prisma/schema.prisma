@@ -137,10 +137,18 @@ model BrandOwnerShop {
 // PRODUCT DOMAIN
 //////////////////////////////
 
+enum BrandStatus {
+  ACTIVE
+  INACTIVE
+}
+
 model ProductBrand {
   id          String   @id @default(uuid())
   name        String
   description String?
+  tagline     String?
+  logoUrl     String?
+  status      BrandStatus @default(ACTIVE)
   createdAt   DateTime @default(now())
 
   ownerId String
