@@ -1,4 +1,11 @@
-import { IsOptional, IsNumber, IsInt, Min } from 'class-validator';
+import {
+    IsOptional,
+    IsNumber,
+    IsInt,
+    Min,
+    IsString,
+    IsBoolean,
+} from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 /**
@@ -8,9 +15,12 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
  * Used for partially updating a product variant.
  *
  * Features:
+ * - Update SKU
+ * - Update variant attributes (size, color)
  * - Update financial fields (net prices, tax rate)
  * - Update cost price
  * - Update stock quantity
+ * - Update active status
  *
  * Notes:
  * - All fields are optional (PATCH request)
@@ -18,8 +28,31 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
  * - All numeric values must be >= 0
  * ---------------------------------------------------------
  */
-
 export class UpdateProductVariantDto {
+    @ApiPropertyOptional({
+        example: 'TSHIRT-001-L-BLACK',
+        description: 'Updated SKU for the variant',
+    })
+    @IsOptional()
+    @IsString()
+    sku?: string;
+
+    @ApiPropertyOptional({
+        example: 'L',
+        description: 'Updated size attribute',
+    })
+    @IsOptional()
+    @IsString()
+    size?: string;
+
+    @ApiPropertyOptional({
+        example: 'Blue',
+        description: 'Updated color attribute',
+    })
+    @IsOptional()
+    @IsString()
+    color?: string;
+
     @ApiPropertyOptional({
         example: 19,
         description: 'Updated tax rate percentage (e.g., 19 for 19%)',
@@ -64,4 +97,12 @@ export class UpdateProductVariantDto {
     @IsInt()
     @Min(0)
     stock?: number;
+
+    @ApiPropertyOptional({
+        example: true,
+        description: 'Whether the variant is active',
+    })
+    @IsOptional()
+    @IsBoolean()
+    isActive?: boolean;
 }

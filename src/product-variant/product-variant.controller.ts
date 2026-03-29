@@ -13,29 +13,34 @@
  * Base: /products/:productId/variants
  *
  * POST    /products/:productId/variants
- *         → Create variant for a product
- *
+ * GET     /products/:productId/variants
+ * GET     /products/:productId/variants/summary
  * PATCH   /products/:productId/variants/:variantId
- *         → Update variant
- *
  * DELETE  /products/:productId/variants/:variantId
- *         → Soft delete variant
- *
- * Notes:
- * - Controller contains no business logic
- * - All validation & financial logic handled in service layer
- * - UUID validation enforced via ParseUUIDPipe
  * ---------------------------------------------------------
  */
-import { Controller, Post, Body, Param, ParseUUIDPipe, Patch, Delete, Get, UseGuards, Req } from '@nestjs/common';
+
+import {
+    Controller,
+    Post,
+    Body,
+    Param,
+    ParseUUIDPipe,
+    Patch,
+    Delete,
+    Get,
+    UseGuards,
+} from '@nestjs/common';
 import { ProductVariantService } from './product-variant.service';
 import { CreateProductVariantDto } from './dto/create-product-variant.dto';
 import { UpdateProductVariantDto } from './dto/update-product-variant.dto';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiParam } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { JwtGuard } from 'src/auth/jwt.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Role } from '@prisma/client';
+import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
+import type { JwtUser } from 'src/auth/types/jwt-user.type';
 
 @UseGuards(JwtGuard, RolesGuard)
 @Controller('products/:productId/variants')
@@ -43,12 +48,6 @@ import { Role } from '@prisma/client';
 export class ProductVariantController {
     constructor(private readonly service: ProductVariantService) { }
 
-    /**
-   * Create a new variant under a product
-   *
-   * - Validates productId as UUID
-   * - Delegates SKU generation & validation to service
-   */
     @ApiOperation({ summary: 'Create variant for a product' })
     @ApiParam({ name: 'productId', description: 'Product UUID' })
     @Roles(Role.BRAND_OWNER)
@@ -56,67 +55,57 @@ export class ProductVariantController {
     create(
         @Param('productId', new ParseUUIDPipe()) productId: string,
         @Body() dto: CreateProductVariantDto,
+        @CurrentUser() user: JwtUser,
     ) {
-        return this.service.create(productId, dto);
+        return this.service.create(productId, dto, user);
     }
 
-
-
-    /**
-   * Update variant details
-   *
-   * - Validates variantId as UUID
-   * - Recalculates financial fields in service layer
-   */
-    @ApiOperation({ summary: 'Update product variant' })
-    @ApiParam({ name: 'variantId', description: 'Variant UUID' })
-    @Roles(Role.BRAND_OWNER)
-    @Patch(':variantId')
-    update(
-        @Param('variantId', new ParseUUIDPipe()) variantId: string,
-        @Body() dto: UpdateProductVariantDto,
-    ) {
-        return this.service.update(variantId, dto);
-    }
-
-    /**
-   * Soft delete variant
-   *
-   * - Sets isActive = false
-   * - Preserves historical data
-   */
-    @ApiOperation({ summary: 'Delete product variant' })
-    @ApiParam({ name: 'variantId', description: 'Variant UUID' })
-    @Roles(Role.BRAND_OWNER)
-    @Delete(':variantId')
-    remove(@Param('variantId', new ParseUUIDPipe()) variantId: string) {
-        return this.service.remove(variantId);
-    }
-
-    /**
- * List all active variants for a product
- */
+    @ApiOperation({ summary: 'List all active variants for a product' })
+    @ApiParam({ name: 'productId', description: 'Product UUID' })
     @Roles(Role.BRAND_OWNER, Role.SHOP_OWNER, Role.SUPER_ADMIN)
     @Get()
     findAll(
         @Param('productId', new ParseUUIDPipe()) productId: string,
-        @Req() req,
+        @CurrentUser() user: JwtUser,
     ) {
-        return this.service.findAll(productId, req.user);
+        return this.service.findAll(productId, user);
     }
 
-    /**
- * Get aggregated stock & pricing summary
- */
+    @ApiOperation({ summary: 'Get aggregated stock & pricing summary' })
+    @ApiParam({ name: 'productId', description: 'Product UUID' })
     @Roles(Role.BRAND_OWNER, Role.SHOP_OWNER, Role.SUPER_ADMIN)
     @Get('summary')
     getSummary(
         @Param('productId', new ParseUUIDPipe()) productId: string,
-        @Req() req,
+        @CurrentUser() user: JwtUser,
     ) {
-        return this.service.getSummary(productId, req.user);
+        return this.service.getSummary(productId, user);
     }
 
+    @ApiOperation({ summary: 'Update product variant' })
+    @ApiParam({ name: 'productId', description: 'Product UUID' })
+    @ApiParam({ name: 'variantId', description: 'Variant UUID' })
+    @Roles(Role.BRAND_OWNER)
+    @Patch(':variantId')
+    update(
+        @Param('productId', new ParseUUIDPipe()) productId: string,
+        @Param('variantId', new ParseUUIDPipe()) variantId: string,
+        @Body() dto: UpdateProductVariantDto,
+        @CurrentUser() user: JwtUser,
+    ) {
+        return this.service.update(productId, variantId, dto, user);
+    }
+
+    @ApiOperation({ summary: 'Soft delete product variant' })
+    @ApiParam({ name: 'productId', description: 'Product UUID' })
+    @ApiParam({ name: 'variantId', description: 'Variant UUID' })
+    @Roles(Role.BRAND_OWNER)
+    @Delete(':variantId')
+    remove(
+        @Param('productId', new ParseUUIDPipe()) productId: string,
+        @Param('variantId', new ParseUUIDPipe()) variantId: string,
+        @CurrentUser() user: JwtUser,
+    ) {
+        return this.service.remove(productId, variantId, user);
+    }
 }
-
-

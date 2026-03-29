@@ -4,6 +4,7 @@ import {
     IsNumber,
     IsInt,
     Min,
+    IsBoolean,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -18,13 +19,13 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
  * - Variant attributes (size, color)
  * - Financial fields (net prices + tax rate)
  * - Stock management
+ * - Optional active status
  *
  * Notes:
  * - Gross prices are calculated in the service layer
  * - All monetary values must be >= 0
  * ---------------------------------------------------------
  */
-
 export class CreateProductVariantDto {
     @ApiPropertyOptional({
         example: 'TSHIRT-001-M-BLACK',
@@ -90,4 +91,12 @@ export class CreateProductVariantDto {
     @IsInt()
     @Min(0)
     stock: number;
+
+    @ApiPropertyOptional({
+        example: true,
+        description: 'Whether the variant is active',
+    })
+    @IsOptional()
+    @IsBoolean()
+    isActive?: boolean;
 }
