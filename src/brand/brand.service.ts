@@ -24,7 +24,7 @@ export class BrandService {
         return this.prisma.productBrand.create({
             data: {
                 name: dto.name,
-                ownerId: brandOwner.id,
+                brandOwnerId: brandOwner.id,
             },
         });
     }
@@ -43,7 +43,7 @@ export class BrandService {
             const brandOwner = await this.getBrandOwnerProfile(user.id);
 
             return this.prisma.productBrand.findMany({
-                where: { ownerId: brandOwner.id },
+                where: { brandOwnerId: brandOwner.id },
             });
         }
 
@@ -79,7 +79,7 @@ export class BrandService {
         if (user.role === Role.BRAND_OWNER) {
             const brandOwner = await this.getBrandOwnerProfile(user.id);
 
-            if (brand.ownerId !== brandOwner.id) {
+            if (brand.brandOwnerId !== brandOwner.id) {
                 throw new ForbiddenException('Not your brand');
             }
 
@@ -99,7 +99,13 @@ export class BrandService {
 
         return this.prisma.productBrand.update({
             where: { id: brand.id },
-            data: dto,
+            data: {
+                name: dto.name,
+                tagline: dto.tagline,
+                description: dto.description,
+                logoUrl: dto.logoUrl,
+                status: dto.status,
+            }
         });
     }
 

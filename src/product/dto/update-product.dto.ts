@@ -11,7 +11,6 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
  * is used with PATCH requests.
  * ---------------------------------------------------------
  */
-
 export class UpdateProductDto {
     @ApiPropertyOptional({
         example: 'Premium Cotton T-Shirt',
@@ -20,6 +19,14 @@ export class UpdateProductDto {
     @IsOptional()
     @IsString()
     name?: string;
+
+    @ApiPropertyOptional({
+        example: 'AYD-COTTON-002',
+        description: 'Updated product code',
+    })
+    @IsOptional()
+    @IsString()
+    productCode?: string;
 
     @ApiPropertyOptional({
         example: 'Updated description for the product.',
@@ -31,10 +38,17 @@ export class UpdateProductDto {
 
     @ApiPropertyOptional({
         example: '660e8400-e29b-41d4-a716-446655440111',
+        description: 'New brand UUID',
+    })
+    @IsOptional()
+    @IsUUID()
+    brandId?: string;
+
+    @ApiPropertyOptional({
+        example: '660e8400-e29b-41d4-a716-446655440112',
         description: 'New category UUID (if product is being moved)',
     })
     @IsOptional()
     @IsUUID()
     categoryId?: string;
-    brandId: any;
 }

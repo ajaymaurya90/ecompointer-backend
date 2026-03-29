@@ -151,12 +151,12 @@ model ProductBrand {
   status      BrandStatus @default(ACTIVE)
   createdAt   DateTime @default(now())
 
-  ownerId String
-  owner   BrandOwner @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  brandOwnerId String
+  brandOwner   BrandOwner @relation(fields: [brandOwnerId], references: [id], onDelete: Cascade)
 
   products   Product[]
 
-  @@index([ownerId])
+  @@index([brandOwnerId])
 }
 
 model ProductCategory {

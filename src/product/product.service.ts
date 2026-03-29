@@ -40,6 +40,7 @@ import type { JwtUser } from 'src/auth/types/jwt-user.type';
 
 @Injectable()
 export class ProductService {
+    
     constructor(private prisma: PrismaService) { }
 
     /* =====================================================
@@ -52,7 +53,7 @@ export class ProductService {
             where: { id: dto.brandId },
         });
 
-        if (!brand || brand.ownerId !== brandOwner.id) {
+        if (!brand || brand.brandOwnerId !== brandOwner.id) {
             throw new ForbiddenException('Not your brand');
         }
 
@@ -65,7 +66,7 @@ export class ProductService {
         });
 
         if (!category) {
-            throw new BadRequestException('Invalid category for this brand');
+            throw new BadRequestException('Invalid category for this BrandOwner');
         }
 
         try {
@@ -85,7 +86,7 @@ export class ProductService {
                 error.code === 'P2002'
             ) {
                 throw new BadRequestException(
-                    'Product code already exists for this brand',
+                    `Product code "${dto.productCode}" already exists for this brand`,
                 );
             }
             throw error;
@@ -115,7 +116,7 @@ export class ProductService {
             throw new NotFoundException('Product not found');
         }
 
-        await this.validateProductAccess(product.brand.ownerId, user, false);
+        await this.validateProductAccess(product.brand.brandOwnerId, user, false);
 
         return product;
     }
@@ -157,12 +158,19 @@ export class ProductService {
             where.categoryId = filters.categoryId;
         }
 
+        const allowedSortFields = ['createdAt', 'name', 'productCode'];
+        const sortBy = allowedSortFields.includes(filters.sortBy || '')
+            ? filters.sortBy!
+            : 'createdAt';
+
+        const order = filters.order === 'asc' ? 'asc' : 'desc';
+
         const [products, total] = await this.prisma.$transaction([
             this.prisma.product.findMany({
                 where,
                 skip,
                 take: limit,
-                orderBy: { [filters.sortBy || 'createdAt']: filters.order || 'desc' },
+                orderBy: { [sortBy]: order },
                 include: {
                     brand: true,
                     category: true,
@@ -202,12 +210,8 @@ export class ProductService {
             throw new NotFoundException('Product not found');
         }
 
-        // Validate ownership using product.brandOwnerId directly
         await this.validateProductAccess(product.brandOwnerId, user, true);
 
-        /* ---------------------------------------------------
-           If category is being changed
-        --------------------------------------------------- */
         if (dto.categoryId) {
             const category = await this.prisma.productCategory.findFirst({
                 where: {
@@ -224,14 +228,11 @@ export class ProductService {
             }
         }
 
-        /* ---------------------------------------------------
-           If brand is being changed (important!)
-        --------------------------------------------------- */
         if (dto.brandId) {
             const brand = await this.prisma.productBrand.findFirst({
                 where: {
                     id: dto.brandId,
-                    ownerId: product.brandOwnerId,
+                    brandOwnerId: product.brandOwnerId,
                 },
             });
 
@@ -242,10 +243,23 @@ export class ProductService {
             }
         }
 
-        return this.prisma.product.update({
-            where: { id: productId },
-            data: dto,
-        });
+        try {
+            return await this.prisma.product.update({
+                where: { id: productId },
+                data: dto,
+            });
+        } catch (error) {
+            if (
+                error instanceof Prisma.PrismaClientKnownRequestError &&
+                error.code === 'P2002'
+            ) {
+                throw new BadRequestException(
+                    `Product code "${dto.productCode}" already exists for this brand`,
+                );
+            }
+
+            throw error;
+        }
     }
 
     /* =====================================================
@@ -261,7 +275,7 @@ export class ProductService {
             throw new NotFoundException('Product not found');
         }
 
-        await this.validateProductAccess(product.brand.ownerId, user, true);
+        await this.validateProductAccess(product.brand.brandOwnerId, user, true);
 
         return this.prisma.product.update({
             where: { id: productId },
