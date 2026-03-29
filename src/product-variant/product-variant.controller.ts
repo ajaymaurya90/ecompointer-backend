@@ -41,6 +41,7 @@ import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Role } from '@prisma/client';
 import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
 import type { JwtUser } from 'src/auth/types/jwt-user.type';
+import { GenerateProductVariantsDto } from './dto/generate-product-variants.dto';
 
 @UseGuards(JwtGuard, RolesGuard)
 @Controller('products/:productId/variants')
@@ -107,5 +108,17 @@ export class ProductVariantController {
         @CurrentUser() user: JwtUser,
     ) {
         return this.service.remove(productId, variantId, user);
+    }
+
+    @ApiOperation({ summary: 'Generate variants from attribute combinations' })
+    @ApiParam({ name: 'productId', description: 'Product UUID' })
+    @Roles(Role.BRAND_OWNER)
+    @Post('generate')
+    generate(
+        @Param('productId', new ParseUUIDPipe()) productId: string,
+        @Body() dto: GenerateProductVariantsDto,
+        @CurrentUser() user: JwtUser,
+    ) {
+        return this.service.generate(productId, dto, user);
     }
 }

@@ -31,6 +31,7 @@ import { CreateProductVariantDto } from './dto/create-product-variant.dto';
 import { UpdateProductVariantDto } from './dto/update-product-variant.dto';
 import { Prisma, Role } from '@prisma/client';
 import type { JwtUser } from 'src/auth/types/jwt-user.type';
+import { GenerateProductVariantsDto } from './dto/generate-product-variants.dto';
 
 @Injectable()
 export class ProductVariantService {
@@ -221,6 +222,17 @@ export class ProductVariantService {
                 isActive: true,
             },
             orderBy: { createdAt: 'asc' },
+            include: {
+                attributeValues: {
+                    include: {
+                        attributeValue: {
+                            include: {
+                                attribute: true,
+                            },
+                        },
+                    },
+                },
+            },
         });
     }
 
@@ -347,5 +359,235 @@ export class ProductVariantService {
                 },
             },
         });
+    }
+
+    async generate(
+        productId: string,
+        dto: GenerateProductVariantsDto,
+        user: JwtUser,
+    ) {
+        const product = await this.getAccessibleProduct(productId, user, true);
+
+        const normalizedAttributes = dto.attributes
+            .map((attribute, attributeIndex) => ({
+                name: this.normalizeAttributeName(attribute.name),
+                position: attributeIndex + 1,
+                values: attribute.values
+                    .map((value, valueIndex) => ({
+                        value: this.normalizeAttributeValue(value),
+                        position: valueIndex + 1,
+                    }))
+                    .filter((item) => item.value.length > 0),
+            }))
+            .filter(
+                (attribute) =>
+                    attribute.name.length > 0 && attribute.values.length > 0,
+            );
+
+        if (!normalizedAttributes.length) {
+            throw new BadRequestException('At least one valid attribute is required');
+        }
+
+        const duplicateAttributeNames = new Set<string>();
+        const seenNames = new Set<string>();
+
+        for (const attribute of normalizedAttributes) {
+            const lower = attribute.name.toLowerCase();
+            if (seenNames.has(lower)) {
+                duplicateAttributeNames.add(attribute.name);
+            }
+            seenNames.add(lower);
+        }
+
+        if (duplicateAttributeNames.size > 0) {
+            throw new BadRequestException('Duplicate attribute names are not allowed');
+        }
+
+        const combinations = this.buildCombinations(
+            normalizedAttributes.map((attribute) => ({
+                name: attribute.name,
+                values: attribute.values.map((value) => value.value),
+            })),
+        );
+
+        return this.prisma.$transaction(async (tx) => {
+            const attributeDefinitionMap = new Map<string, string>();
+            const attributeValueMap = new Map<string, string>();
+
+            for (const attribute of normalizedAttributes) {
+                const definition = await tx.productAttribute.upsert({
+                    where: {
+                        productId_name: {
+                            productId,
+                            name: attribute.name,
+                        },
+                    },
+                    update: {
+                        position: attribute.position,
+                    },
+                    create: {
+                        productId,
+                        name: attribute.name,
+                        position: attribute.position,
+                    },
+                });
+
+                attributeDefinitionMap.set(attribute.name, definition.id);
+
+                for (const value of attribute.values) {
+                    const valueRecord = await tx.productAttributeValue.upsert({
+                        where: {
+                            attributeId_value: {
+                                attributeId: definition.id,
+                                value: value.value,
+                            },
+                        },
+                        update: {
+                            position: value.position,
+                        },
+                        create: {
+                            attributeId: definition.id,
+                            value: value.value,
+                            position: value.position,
+                        },
+                    });
+
+                    attributeValueMap.set(
+                        `${attribute.name}::${value.value}`,
+                        valueRecord.id,
+                    );
+                }
+            }
+
+            const created: any[] = [];
+            const skipped: Array<{ sku: string; reason: string }> = [];
+
+            for (const combination of combinations) {
+                const sku = this.generateCombinationSku(
+                    product.productCode,
+                    combination,
+                );
+
+                const existingVariant = await tx.productVariant.findUnique({
+                    where: { sku },
+                });
+
+                if (existingVariant) {
+                    skipped.push({
+                        sku,
+                        reason: 'SKU already exists',
+                    });
+                    continue;
+                }
+
+                const sizeValue =
+                    combination.find(
+                        (item) => item.name.toLowerCase() === 'size',
+                    )?.value ?? null;
+
+                const colorValue =
+                    combination.find(
+                        (item) => item.name.toLowerCase() === 'color',
+                    )?.value ?? null;
+
+                const wholesaleGross = this.calculateGross(
+                    dto.wholesaleNet,
+                    dto.taxRate,
+                );
+
+                const retailGross = this.calculateGross(
+                    dto.retailNet,
+                    dto.taxRate,
+                );
+
+                const variant = await tx.productVariant.create({
+                    data: {
+                        productId,
+                        sku,
+                        size: sizeValue,
+                        color: colorValue,
+                        taxRate: dto.taxRate,
+                        costPrice: dto.costPrice,
+                        wholesaleNet: dto.wholesaleNet,
+                        wholesaleGross,
+                        retailNet: dto.retailNet,
+                        retailGross,
+                        stock: dto.stock,
+                        isActive: dto.isActive ?? true,
+                    },
+                });
+
+                for (const item of combination) {
+                    const attributeValueId = attributeValueMap.get(
+                        `${item.name}::${item.value}`,
+                    );
+
+                    if (!attributeValueId) {
+                        throw new BadRequestException(
+                            `Missing attribute value mapping for ${item.name}: ${item.value}`,
+                        );
+                    }
+
+                    await tx.productVariantAttributeValue.create({
+                        data: {
+                            variantId: variant.id,
+                            attributeValueId,
+                        },
+                    });
+                }
+
+                created.push(variant);
+            }
+
+            return {
+                createdCount: created.length,
+                skippedCount: skipped.length,
+                created,
+                skipped,
+            };
+        });
+    }
+
+    private normalizeAttributeName(name: string): string {
+        return name.trim();
+    }
+
+    private normalizeAttributeValue(value: string): string {
+        return value.trim();
+    }
+
+    private buildCombinations(
+        attributes: { name: string; values: string[] }[],
+        index = 0,
+        current: { name: string; value: string }[] = [],
+    ): { name: string; value: string }[][] {
+        if (index === attributes.length) {
+            return [current];
+        }
+
+        const attribute = attributes[index];
+        const combinations: { name: string; value: string }[][] = [];
+
+        for (const value of attribute.values) {
+            combinations.push(
+                ...this.buildCombinations(attributes, index + 1, [
+                    ...current,
+                    { name: attribute.name, value },
+                ]),
+            );
+        }
+
+        return combinations;
+    }
+
+    private generateCombinationSku(
+        productCode: string,
+        combination: { name: string; value: string }[],
+    ): string {
+        const suffix = combination
+            .map((item) => item.value.trim().toUpperCase().replace(/\s+/g, '-'))
+            .join('-');
+
+        return `${productCode}-${suffix}`;
     }
 }
