@@ -14,6 +14,9 @@ datasource db {
 enum OrderStatus {
   PENDING
   CONFIRMED
+  PARTIALLY_CONFIRMED
+  PROCESSING
+  PARTIALLY_DISPATCHED
   DISPATCHED
   DELIVERED
   CANCELLED
@@ -30,7 +33,166 @@ enum Role {
   SHOP_OWNER
   SUPER_ADMIN
   CUSTOMER
+}
 
+enum CustomerType {
+  INDIVIDUAL
+  BUSINESS
+  BOTH
+}
+
+enum CustomerStatus {
+  LEAD
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+enum CustomerSource {
+  WEBSITE
+  MOBILE_APP
+  MANUAL
+  SHOP_REFERRAL
+  IMPORT
+  MARKETPLACE
+  OTHER
+}
+
+enum AddressType {
+  BILLING
+  SHIPPING
+  BOTH
+}
+
+enum BusinessType {
+  SHOP_OWNER
+  DISTRIBUTOR
+  WHOLESALER
+  RESELLER
+  COMPANY
+  OTHER
+}
+
+enum BuyerType {
+  SHOP_OWNER
+  CUSTOMER
+}
+
+enum SalesChannelType {
+  DIRECT_WEBSITE
+  SHOP_ORDER
+  FRANCHISE_SHOP
+  MARKETPLACE
+  SOCIAL_MEDIA
+  MANUAL
+}
+
+enum InventoryLocationType {
+  WAREHOUSE
+  SHOP
+  FRANCHISE
+  MARKETPLACE_BUFFER
+  RETURNS
+  OTHER
+}
+
+enum InventoryTransactionType {
+  OPENING_STOCK
+  PURCHASE_IN
+  MANUAL_ADJUSTMENT
+  ORDER_RESERVED
+  ORDER_CONFIRMED
+  ORDER_CANCELLED
+  ORDER_RETURNED
+  TRANSFER_IN
+  TRANSFER_OUT
+  DAMAGED
+}
+
+enum BrandStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum MediaType {
+  THUMBNAIL
+  GALLERY
+  ZOOM
+  VIDEO
+}
+
+//////////////////////////////
+// MASTER DATA
+//////////////////////////////
+
+model Language {
+  id         String  @id @default(uuid())
+  code       String  @unique
+  name       String
+  nativeName String?
+  isActive   Boolean @default(true)
+  isDefault  Boolean @default(false)
+
+  productBrandTranslations          ProductBrandTranslations[]
+  productCategoryTranslations       ProductCategoryTranslations[]
+  productTranslations               ProductTranslations[]
+  productAttributeTranslations      ProductAttributeTranslations[]
+  productAttributeValueTranslations ProductAttributeValueTranslations[]
+  customerGroupTranslations         CustomerGroupTranslations[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Country {
+  id           String  @id @default(uuid())
+  code         String  @unique
+  name         String
+  phoneCode    String?
+  currencyCode String?
+  isActive     Boolean @default(true)
+
+  states            State[]
+  customerAddresses CustomerAddress[] @relation("CustomerAddressCountry")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model State {
+  id        String  @id @default(uuid())
+  countryId String
+  country   Country @relation(fields: [countryId], references: [id], onDelete: Cascade)
+
+  code     String?
+  name     String
+  isActive Boolean @default(true)
+
+  districts         District[]
+  customerAddresses CustomerAddress[] @relation("CustomerAddressState")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([countryId, name])
+  @@index([countryId])
+}
+
+model District {
+  id      String @id @default(uuid())
+  stateId String
+  state   State  @relation(fields: [stateId], references: [id], onDelete: Cascade)
+
+  name     String
+  isActive Boolean @default(true)
+
+  customerAddresses CustomerAddress[] @relation("CustomerAddressDistrict")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([stateId, name])
+  @@index([stateId])
 }
 
 //////////////////////////////
@@ -40,9 +202,9 @@ enum Role {
 model User {
   id        String  @id @default(uuid())
   email     String  @unique
-  firstName  String
-  lastName   String?
-  phone      String   @unique
+  firstName String
+  lastName  String?
+  phone     String  @unique
   password  String
   role      Role
   isActive  Boolean @default(true)
@@ -53,7 +215,7 @@ model User {
   refreshToken String?
   tokenVersion Int     @default(0)
 
-  isDeleted Boolean @default(false)
+  isDeleted Boolean   @default(false)
   deletedAt DateTime?
 
   createdAt DateTime @default(now())
@@ -63,25 +225,33 @@ model User {
 }
 
 model BrandOwner {
-  id        String  @id @default(uuid())
+  id           String  @id @default(uuid())
   businessName String
-  phone     String?
-  gstNumber   String?
-  address     String?
-  state       String?
-  city        String?
-  country     String?
-  logoUrl   String?
-  isActive  Boolean @default(true)
+  phone        String?
+  gstNumber    String?
+  address      String?
+  state        String?
+  city         String?
+  country      String?
+  logoUrl      String?
+  isActive     Boolean @default(true)
 
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  brands    ProductBrand[]
+  brands     ProductBrand[]
   categories ProductCategory[]
-  products  Product[]
-  shopLinks BrandOwnerShop[]
-  orders    Order[]
+  products   Product[]
+  shopLinks  BrandOwnerShop[]
+
+  orders       Order[]
+  sellerOrders OrderSeller[]
+
+  customers      Customer[]
+  customerGroups CustomerGroup[]
+
+  inventoryLocations    InventoryLocation[]
+  inventoryTransactions InventoryTransaction[]
 
   language String? @default("en")
 
@@ -104,8 +274,12 @@ model ShopOwner {
   userId String? @unique
   user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  brandLinks BrandOwnerShop[]
-  orders     Order[]
+  customerBusinesses CustomerBusiness[]
+  brandLinks         BrandOwnerShop[]
+
+  orders Order[]
+
+  inventoryLocations InventoryLocation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -137,50 +311,45 @@ model BrandOwnerShop {
 // PRODUCT DOMAIN
 //////////////////////////////
 
-enum BrandStatus {
-  ACTIVE
-  INACTIVE
-}
-
 model ProductBrand {
-  id          String   @id @default(uuid())
+  id          String      @id @default(uuid())
   name        String
   description String?
   tagline     String?
   logoUrl     String?
   status      BrandStatus @default(ACTIVE)
-  createdAt   DateTime @default(now())
+  createdAt   DateTime    @default(now())
 
   brandOwnerId String
   brandOwner   BrandOwner @relation(fields: [brandOwnerId], references: [id], onDelete: Cascade)
 
-  products   Product[]
+  products     Product[]
+  translations ProductBrandTranslations[]
 
   @@index([brandOwnerId])
 }
 
 model ProductCategory {
-  id   String @id @default(uuid())
-  name String
-  description   String?
+  id          String  @id @default(uuid())
+  name        String
+  description String?
 
-  brandOwnerId  String
-  brandOwner    BrandOwner @relation(fields: [brandOwnerId], references: [id])
+  brandOwnerId String
+  brandOwner   BrandOwner @relation(fields: [brandOwnerId], references: [id])
 
-  // Self-referencing hierarchy
   parentId String?
   parent   ProductCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
   children ProductCategory[] @relation("CategoryHierarchy")
 
   products Product[]
-  position Int @default(0)
+  position Int       @default(0)
+  isActive Boolean   @default(true)
 
-  isActive Boolean @default(true)
+  translations ProductCategoryTranslations[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Prevent duplicate category names at same level under same brand
   @@unique([brandOwnerId, name, parentId])
   @@index([brandOwnerId])
   @@index([parentId])
@@ -195,8 +364,8 @@ model Product {
   brandId String
   brand   ProductBrand @relation(fields: [brandId], references: [id])
 
-  brandOwnerId  String
-  brandOwner    BrandOwner @relation(fields: [brandOwnerId], references: [id])
+  brandOwnerId String
+  brandOwner   BrandOwner @relation(fields: [brandOwnerId], references: [id])
 
   categoryId String
   category   ProductCategory @relation(fields: [categoryId], references: [id])
@@ -204,10 +373,10 @@ model Product {
   description String?
   isActive    Boolean @default(true)
 
-  variants ProductVariant[]
-  media Media[]
-
-  attributes ProductAttribute[]
+  variants     ProductVariant[]
+  media        Media[]
+  attributes   ProductAttribute[]
+  translations ProductTranslations[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -240,23 +409,25 @@ model ProductVariant {
 
   inventories ProductInventory[]
   orderItems  OrderItem[]
-  media Media[]
+  media       Media[]
 
-  attributeValues ProductVariantAttributeValue[]
+  attributeValues       ProductVariantAttributeValue[]
+  inventoryTransactions InventoryTransaction[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model ProductAttribute {
-  id        String   @id @default(uuid())
+  id        String  @id @default(uuid())
   productId String
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  name      String
-  position  Int      @default(0)
+  name     String
+  position Int    @default(0)
 
-  values    ProductAttributeValue[]
+  values       ProductAttributeValue[]
+  translations ProductAttributeTranslations[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -270,32 +441,163 @@ model ProductAttributeValue {
   attributeId String
   attribute   ProductAttribute @relation(fields: [attributeId], references: [id], onDelete: Cascade)
 
-  value       String
-  position    Int              @default(0)
+  value    String
+  position Int    @default(0)
 
-  variants    ProductVariantAttributeValue[]
+  variants     ProductVariantAttributeValue[]
+  translations ProductAttributeValueTranslations[]
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([attributeId, value])
   @@index([attributeId])
 }
 
 model ProductVariantAttributeValue {
-  id               String                @id @default(uuid())
+  id String @id @default(uuid())
 
-  variantId        String
-  variant          ProductVariant        @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  variantId String
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
 
   attributeValueId String
   attributeValue   ProductAttributeValue @relation(fields: [attributeValueId], references: [id], onDelete: Cascade)
 
-  createdAt        DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@unique([variantId, attributeValueId])
   @@index([variantId])
   @@index([attributeValueId])
+}
+
+//////////////////////////////
+// PRODUCT TRANSLATIONS
+//////////////////////////////
+
+model ProductBrandTranslations {
+  id             String       @id @default(uuid())
+  productBrandId String
+  productBrand   ProductBrand @relation(fields: [productBrandId], references: [id], onDelete: Cascade)
+
+  languageId String
+  language   Language @relation(fields: [languageId], references: [id], onDelete: Cascade)
+
+  name        String?
+  description String?
+  tagline     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productBrandId, languageId])
+  @@index([productBrandId])
+  @@index([languageId])
+}
+
+model ProductCategoryTranslations {
+  id                String          @id @default(uuid())
+  productCategoryId String
+  productCategory   ProductCategory @relation(fields: [productCategoryId], references: [id], onDelete: Cascade)
+
+  languageId String
+  language   Language @relation(fields: [languageId], references: [id], onDelete: Cascade)
+
+  name        String?
+  description String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productCategoryId, languageId])
+  @@index([productCategoryId])
+  @@index([languageId])
+}
+
+model ProductTranslations {
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  languageId String
+  language   Language @relation(fields: [languageId], references: [id], onDelete: Cascade)
+
+  name           String?
+  description    String?
+  slug           String?
+  seoTitle       String?
+  seoDescription String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, languageId])
+  @@index([productId])
+  @@index([languageId])
+}
+
+model ProductAttributeTranslations {
+  id                 String           @id @default(uuid())
+  productAttributeId String
+  productAttribute   ProductAttribute @relation(fields: [productAttributeId], references: [id], onDelete: Cascade)
+
+  languageId String
+  language   Language @relation(fields: [languageId], references: [id], onDelete: Cascade)
+
+  name String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productAttributeId, languageId])
+  @@index([productAttributeId])
+  @@index([languageId])
+}
+
+model ProductAttributeValueTranslations {
+  id                      String                @id @default(uuid())
+  productAttributeValueId String
+  productAttributeValue   ProductAttributeValue @relation(fields: [productAttributeValueId], references: [id], onDelete: Cascade)
+
+  languageId String
+  language   Language @relation(fields: [languageId], references: [id], onDelete: Cascade)
+
+  value String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productAttributeValueId, languageId])
+  @@index([productAttributeValueId])
+  @@index([languageId])
+}
+
+//////////////////////////////
+// INVENTORY DOMAIN
+//////////////////////////////
+
+model InventoryLocation {
+  id           String     @id @default(uuid())
+  brandOwnerId String
+  brandOwner   BrandOwner @relation(fields: [brandOwnerId], references: [id], onDelete: Cascade)
+
+  shopOwnerId String?
+  shopOwner   ShopOwner? @relation(fields: [shopOwnerId], references: [id], onDelete: SetNull)
+
+  name     String
+  code     String?
+  type     InventoryLocationType @default(WAREHOUSE)
+  address  String?
+  isActive Boolean               @default(true)
+
+  inventories  ProductInventory[]
+  transactions InventoryTransaction[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([brandOwnerId, name])
+  @@index([brandOwnerId])
+  @@index([shopOwnerId])
 }
 
 model ProductInventory {
@@ -303,13 +605,220 @@ model ProductInventory {
   productVariantId String
   productVariant   ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
 
-  quantity      Int
+  locationId String?
+  location   InventoryLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
   warehouseName String?
+
+  quantity          Int
+  reservedQuantity  Int @default(0)
+  availableQuantity Int @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([productVariantId])
+  @@index([locationId])
+}
+
+model InventoryTransaction {
+  id           String     @id @default(uuid())
+  brandOwnerId String
+  brandOwner   BrandOwner @relation(fields: [brandOwnerId], references: [id], onDelete: Cascade)
+
+  productVariantId String
+  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+
+  locationId String?
+  location   InventoryLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  transactionType InventoryTransactionType
+  quantityChange  Int
+  balanceAfter    Int?
+
+  referenceType String?
+  referenceId   String?
+  note          String?
+
+  createdAt DateTime @default(now())
+
+  @@index([brandOwnerId])
+  @@index([productVariantId])
+  @@index([locationId])
+  @@index([referenceType, referenceId])
+}
+
+//////////////////////////////
+// CUSTOMER DOMAIN
+//////////////////////////////
+
+model Customer {
+  id           String     @id @default(uuid())
+  customerCode String
+  brandOwnerId String
+  brandOwner   BrandOwner @relation(fields: [brandOwnerId], references: [id], onDelete: Cascade)
+
+  type   CustomerType   @default(INDIVIDUAL)
+  status CustomerStatus @default(ACTIVE)
+  source CustomerSource @default(MANUAL)
+
+  firstName      String
+  lastName       String?
+  email          String?
+  phone          String?
+  alternatePhone String?
+  dateOfBirth    DateTime?
+  notes          String?
+
+  isActive  Boolean   @default(true)
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
+  businesses   CustomerBusiness[]
+  addresses    CustomerAddress[]
+  groupMembers CustomerGroupMember[]
+
+  orders Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([brandOwnerId, customerCode])
+  @@index([brandOwnerId])
+  @@index([email])
+  @@index([phone])
+  @@index([status])
+  @@index([type])
+}
+
+model CustomerBusiness {
+  id         String   @id @default(uuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  shopOwnerId String?
+  shopOwner   ShopOwner? @relation(fields: [shopOwnerId], references: [id], onDelete: SetNull)
+
+  businessName      String
+  legalBusinessName String?
+  businessType      BusinessType @default(OTHER)
+
+  contactPersonName  String?
+  contactPersonPhone String?
+  contactPersonEmail String?
+
+  gstNumber          String?
+  taxId              String?
+  registrationNumber String?
+  website            String?
+
+  isPrimary Boolean @default(false)
+  isActive  Boolean @default(true)
+  notes     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([shopOwnerId])
+  @@index([businessName])
+  @@index([gstNumber])
+}
+
+model CustomerAddress {
+  id         String   @id @default(uuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  type AddressType @default(SHIPPING)
+
+  fullName String?
+  phone    String?
+
+  addressLine1 String
+  addressLine2 String?
+  landmark     String?
+  city         String
+  district     String?
+  state        String?
+  country      String?
+  postalCode   String?
+
+  countryId  String?
+  countryRef Country? @relation("CustomerAddressCountry", fields: [countryId], references: [id], onDelete: SetNull)
+
+  stateId  String?
+  stateRef State?  @relation("CustomerAddressState", fields: [stateId], references: [id], onDelete: SetNull)
+
+  districtId  String?
+  districtRef District? @relation("CustomerAddressDistrict", fields: [districtId], references: [id], onDelete: SetNull)
+
+  isDefault Boolean @default(false)
+  isActive  Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([type])
+  @@index([city])
+  @@index([state])
+  @@index([countryId])
+  @@index([stateId])
+  @@index([districtId])
+}
+
+model CustomerGroup {
+  id           String     @id @default(uuid())
+  brandOwnerId String
+  brandOwner   BrandOwner @relation(fields: [brandOwnerId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  isActive    Boolean @default(true)
+
+  members      CustomerGroupMember[]
+  translations CustomerGroupTranslations[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([brandOwnerId, name])
+  @@index([brandOwnerId])
+}
+
+model CustomerGroupMember {
+  id         String   @id @default(uuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  customerGroupId String
+  customerGroup   CustomerGroup @relation(fields: [customerGroupId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([customerId, customerGroupId])
+  @@index([customerId])
+  @@index([customerGroupId])
+}
+
+model CustomerGroupTranslations {
+  id              String        @id @default(uuid())
+  customerGroupId String
+  customerGroup   CustomerGroup @relation(fields: [customerGroupId], references: [id], onDelete: Cascade)
+
+  languageId String
+  language   Language @relation(fields: [languageId], references: [id], onDelete: Cascade)
+
+  name        String?
+  description String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([customerGroupId, languageId])
+  @@index([customerGroupId])
+  @@index([languageId])
 }
 
 //////////////////////////////
@@ -320,25 +829,70 @@ model Order {
   id          String @id @default(uuid())
   orderNumber String @unique
 
-  brandOwnerId String
-  shopOwnerId  String
+  brandOwnerId String?
+  brandOwner   BrandOwner? @relation(fields: [brandOwnerId], references: [id])
 
-  brandOwner BrandOwner @relation(fields: [brandOwnerId], references: [id])
-  shopOwner  ShopOwner  @relation(fields: [shopOwnerId], references: [id])
+  buyerType   BuyerType?
+  shopOwnerId String?
+  shopOwner   ShopOwner? @relation(fields: [shopOwnerId], references: [id])
 
-  totalAmount Decimal @db.Decimal(12, 2)
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
+
+  salesChannel SalesChannelType @default(MANUAL)
+
+  subtotalAmount Decimal @default(0) @db.Decimal(12, 2)
+  discountAmount Decimal @default(0) @db.Decimal(12, 2)
+  taxAmount      Decimal @default(0) @db.Decimal(12, 2)
+  shippingAmount Decimal @default(0) @db.Decimal(12, 2)
+  totalAmount    Decimal @db.Decimal(12, 2)
 
   status        OrderStatus
   paymentStatus PaymentStatus
+  notes         String?
 
-  items    OrderItem[]
-  payments OrderPayment[]
+  sellerOrders OrderSeller[]
+  items        OrderItem[]
+  payments     OrderPayment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([brandOwnerId])
   @@index([shopOwnerId])
+  @@index([customerId])
+  @@index([buyerType])
+  @@index([salesChannel])
+}
+
+model OrderSeller {
+  id      String @id @default(uuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  brandOwnerId String
+  brandOwner   BrandOwner @relation(fields: [brandOwnerId], references: [id], onDelete: Cascade)
+
+  sellerOrderNumber String?
+
+  subtotalAmount Decimal @default(0) @db.Decimal(12, 2)
+  discountAmount Decimal @default(0) @db.Decimal(12, 2)
+  taxAmount      Decimal @default(0) @db.Decimal(12, 2)
+  shippingAmount Decimal @default(0) @db.Decimal(12, 2)
+  totalAmount    Decimal @default(0) @db.Decimal(12, 2)
+
+  status        OrderStatus   @default(PENDING)
+  paymentStatus PaymentStatus @default(UNPAID)
+  notes         String?
+
+  items OrderItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([orderId, brandOwnerId])
+  @@index([orderId])
+  @@index([brandOwnerId])
 }
 
 model OrderItem {
@@ -347,16 +901,22 @@ model OrderItem {
   orderId String
   order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
+  orderSellerId String?
+  orderSeller   OrderSeller? @relation(fields: [orderSellerId], references: [id], onDelete: Cascade)
+
   productVariantId String
   productVariant   ProductVariant @relation(fields: [productVariantId], references: [id])
 
-  quantity     Int
-  priceAtOrder Decimal @db.Decimal(10, 2)
-  totalPrice   Decimal @db.Decimal(12, 2)
+  quantity       Int
+  priceAtOrder   Decimal  @db.Decimal(10, 2)
+  taxRate        Decimal? @db.Decimal(5, 2)
+  discountAmount Decimal  @default(0) @db.Decimal(10, 2)
+  totalPrice     Decimal  @db.Decimal(12, 2)
 
   createdAt DateTime @default(now())
 
   @@index([orderId])
+  @@index([orderSellerId])
   @@index([productVariantId])
 }
 
@@ -379,38 +939,29 @@ model OrderPayment {
 // MEDIA
 //////////////////////////////
 
-enum MediaType {
-  THUMBNAIL
-  GALLERY
-  ZOOM
-  VIDEO
-}
-
 model Media {
-  id         String   @id @default(uuid())
+  id String @id @default(uuid())
 
-  productId  String?
-  product    Product? @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  variantId  String?
-  variant    ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
 
-  url        String
-  altText    String?
+  url     String
+  altText String?
 
-  type       MediaType @default(GALLERY)
-  size       Int?
-  mimeType   String?
-  isPrimary  Boolean   @default(false)
-  sortOrder  Int       @default(0)
+  type      MediaType @default(GALLERY)
+  size      Int?
+  mimeType  String?
+  isPrimary Boolean   @default(false)
+  sortOrder Int       @default(0)
 
-  isActive   Boolean   @default(true)
+  isActive Boolean @default(true)
 
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([productId])
   @@index([variantId])
-
-
 }

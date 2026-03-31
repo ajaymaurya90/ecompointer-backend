@@ -8,6 +8,7 @@ import { ProductCategoryModule } from './product-category/product-category.modul
 import { ProductModule } from './product/product.module';
 import { ProductVariantModule } from './product-variant/product-variant.module';
 import { MediaModule } from './media/media.module';
+import { CustomersModule } from './modules/customers/customers.module';
 
 
 @Module({
@@ -21,6 +22,7 @@ import { MediaModule } from './media/media.module';
     ProductCategoryModule,
     ProductModule,
     ProductVariantModule,
+    CustomersModule,
     MediaModule
   ],
   controllers: [AppController],
