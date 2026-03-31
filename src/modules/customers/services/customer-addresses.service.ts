@@ -77,7 +77,16 @@ export class CustomerAddressesService {
             throw new NotFoundException('Customer address not found');
         }
 
-        await this.validateGeoRefs(dto.countryId, dto.stateId, dto.districtId);
+        const nextCountryId =
+            dto.countryId !== undefined ? dto.countryId || undefined : address.countryId || undefined;
+
+        const nextStateId =
+            dto.stateId !== undefined ? dto.stateId || undefined : address.stateId || undefined;
+
+        const nextDistrictId =
+            dto.districtId !== undefined ? dto.districtId || undefined : address.districtId || undefined;
+
+        await this.validateGeoRefs(nextCountryId, nextStateId, nextDistrictId);
 
         const nextType = dto.type ?? address.type;
 

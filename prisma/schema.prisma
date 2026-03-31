@@ -139,9 +139,28 @@ model Language {
   productAttributeTranslations      ProductAttributeTranslations[]
   productAttributeValueTranslations ProductAttributeValueTranslations[]
   customerGroupTranslations         CustomerGroupTranslations[]
+  brandOwnerLanguages               BrandOwnerLanguage[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model BrandOwnerLanguage {
+  id           String @id @default(uuid())
+  brandOwnerId String
+  languageId   String
+
+  brandOwner BrandOwner @relation(fields: [brandOwnerId], references: [id], onDelete: Cascade)
+  language   Language   @relation(fields: [languageId], references: [id], onDelete: Cascade)
+
+  isDefault Boolean @default(false)
+  isActive  Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([brandOwnerId, languageId])
+  @@index([languageId])
 }
 
 model Country {
@@ -152,8 +171,10 @@ model Country {
   currencyCode String?
   isActive     Boolean @default(true)
 
-  states            State[]
-  customerAddresses CustomerAddress[] @relation("CustomerAddressCountry")
+  states                State[]
+  customerAddresses     CustomerAddress[]
+  brandOwnerCountries   BrandOwnerCountry[]
+  brandOwnersByLocation BrandOwner[]        @relation("BrandOwnerCountryRef")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -168,8 +189,10 @@ model State {
   name     String
   isActive Boolean @default(true)
 
-  districts         District[]
-  customerAddresses CustomerAddress[] @relation("CustomerAddressState")
+  districts             District[]
+  customerAddresses     CustomerAddress[]
+  brandOwnerStates      BrandOwnerState[]
+  brandOwnersByLocation BrandOwner[]      @relation("BrandOwnerStateRef")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -186,13 +209,69 @@ model District {
   name     String
   isActive Boolean @default(true)
 
-  customerAddresses CustomerAddress[] @relation("CustomerAddressDistrict")
+  customerAddresses     CustomerAddress[]
+  brandOwnerDistricts   BrandOwnerDistrict[]
+  brandOwnersByLocation BrandOwner[]         @relation("BrandOwnerDistrictRef")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([stateId, name])
   @@index([stateId])
+}
+
+model BrandOwnerCountry {
+  id           String @id @default(uuid())
+  brandOwnerId String
+  countryId    String
+
+  brandOwner BrandOwner @relation(fields: [brandOwnerId], references: [id], onDelete: Cascade)
+  country    Country    @relation(fields: [countryId], references: [id], onDelete: Cascade)
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([brandOwnerId, countryId])
+  @@index([brandOwnerId])
+  @@index([countryId])
+}
+
+model BrandOwnerState {
+  id           String @id @default(uuid())
+  brandOwnerId String
+  stateId      String
+
+  brandOwner BrandOwner @relation(fields: [brandOwnerId], references: [id], onDelete: Cascade)
+  state      State      @relation(fields: [stateId], references: [id], onDelete: Cascade)
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([brandOwnerId, stateId])
+  @@index([brandOwnerId])
+  @@index([stateId])
+}
+
+model BrandOwnerDistrict {
+  id           String @id @default(uuid())
+  brandOwnerId String
+  districtId   String
+
+  brandOwner BrandOwner @relation(fields: [brandOwnerId], references: [id], onDelete: Cascade)
+  district   District   @relation(fields: [districtId], references: [id], onDelete: Cascade)
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([brandOwnerId, districtId])
+  @@index([brandOwnerId])
+  @@index([districtId])
 }
 
 //////////////////////////////
@@ -252,6 +331,19 @@ model BrandOwner {
 
   inventoryLocations    InventoryLocation[]
   inventoryTransactions InventoryTransaction[]
+
+  brandOwnerLanguages BrandOwnerLanguage[]
+  brandOwnerCountries BrandOwnerCountry[]
+  brandOwnerStates    BrandOwnerState[]
+  brandOwnerDistricts BrandOwnerDistrict[]
+
+  countryId  String?
+  stateId    String?
+  districtId String?
+
+  countryRef  Country?  @relation("BrandOwnerCountryRef", fields: [countryId], references: [id], onDelete: SetNull)
+  stateRef    State?    @relation("BrandOwnerStateRef", fields: [stateId], references: [id], onDelete: SetNull)
+  districtRef District? @relation("BrandOwnerDistrictRef", fields: [districtId], references: [id], onDelete: SetNull)
 
   language String? @default("en")
 
@@ -745,13 +837,12 @@ model CustomerAddress {
   postalCode   String?
 
   countryId  String?
-  countryRef Country? @relation("CustomerAddressCountry", fields: [countryId], references: [id], onDelete: SetNull)
+  stateId    String?
+  districtId String?
 
-  stateId  String?
-  stateRef State?  @relation("CustomerAddressState", fields: [stateId], references: [id], onDelete: SetNull)
-
-  districtId  String?
-  districtRef District? @relation("CustomerAddressDistrict", fields: [districtId], references: [id], onDelete: SetNull)
+  countryRef  Country?  @relation(fields: [countryId], references: [id], onDelete: SetNull)
+  stateRef    State?    @relation(fields: [stateId], references: [id], onDelete: SetNull)
+  districtRef District? @relation(fields: [districtId], references: [id], onDelete: SetNull)
 
   isDefault Boolean @default(false)
   isActive  Boolean @default(true)

@@ -9,6 +9,10 @@ import { ProductModule } from './product/product.module';
 import { ProductVariantModule } from './product-variant/product-variant.module';
 import { MediaModule } from './media/media.module';
 import { CustomersModule } from './modules/customers/customers.module';
+import { CountriesModule } from './modules/master-data/countries/countries.module';
+import { StatesModule } from './modules/master-data/states/states.module';
+import { DistrictsModule } from './modules/master-data/districts/districts.module';
+import { BrandOwnersModule } from './modules/brand-owners/brand-owners.module';
 
 
 @Module({
@@ -23,7 +27,11 @@ import { CustomersModule } from './modules/customers/customers.module';
     ProductModule,
     ProductVariantModule,
     CustomersModule,
-    MediaModule
+    MediaModule,
+    CountriesModule,
+    StatesModule,
+    DistrictsModule,
+    BrandOwnersModule
   ],
   controllers: [AppController],
 })
