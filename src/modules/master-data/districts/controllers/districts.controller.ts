@@ -21,6 +21,8 @@ import { DistrictsService } from '../services/districts.service';
 import { CreateDistrictDto } from '../dto/create-district.dto';
 import { UpdateDistrictDto } from '../dto/update-district.dto';
 import { DistrictQueryDto } from '../dto/district-query.dto';
+import type { JwtUser } from 'src/auth/types/jwt-user.type';
+import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
 
 @ApiTags('Districts')
 @UseGuards(JwtGuard, RolesGuard)
@@ -51,8 +53,11 @@ export class DistrictsController {
        ============================= */
     @Roles(Role.SUPER_ADMIN, Role.BRAND_OWNER)
     @Get()
-    findAll(@Query() query: DistrictQueryDto) {
-        return this.districtsService.findAll(query);
+    findAll(
+        @Query() query: DistrictQueryDto,
+        @CurrentUser() user: JwtUser,
+    ) {
+        return this.districtsService.findAll(query, user);
     }
 
     /* =============================

@@ -24,26 +24,33 @@ export class CustomerAddressesService {
         await this.validateGeoRefs(dto.countryId, dto.stateId, dto.districtId);
 
         if (dto.isDefault) {
-            await this.unsetDefaultAddresses(customer.id, dto.type ?? AddressType.SHIPPING);
+            await this.unsetDefaultAddresses(
+                customer.id,
+                dto.type ?? AddressType.SHIPPING,
+            );
         }
 
         return this.prisma.customerAddress.create({
             data: {
                 customerId: customer.id,
                 type: dto.type ?? AddressType.SHIPPING,
-                fullName: dto.fullName?.trim(),
-                phone: dto.phone?.trim(),
+                fullName: dto.fullName?.trim() || null,
+                phone: dto.phone?.trim() || null,
                 addressLine1: dto.addressLine1.trim(),
-                addressLine2: dto.addressLine2?.trim(),
-                landmark: dto.landmark?.trim(),
+                addressLine2: dto.addressLine2?.trim() || null,
+                landmark: dto.landmark?.trim() || null,
                 city: dto.city.trim(),
-                district: dto.district?.trim(),
-                state: dto.state?.trim(),
-                country: dto.country?.trim(),
-                postalCode: dto.postalCode?.trim(),
-                countryId: dto.countryId,
-                stateId: dto.stateId,
-                districtId: dto.districtId,
+                postalCode: dto.postalCode?.trim() || null,
+
+                countryId: dto.countryId || null,
+                stateId: dto.stateId || null,
+                districtId: dto.districtId || null,
+
+                // legacy text fields retired from write flow
+                country: null,
+                state: null,
+                district: null,
+
                 isDefault: dto.isDefault ?? false,
             },
             include: {
@@ -78,13 +85,19 @@ export class CustomerAddressesService {
         }
 
         const nextCountryId =
-            dto.countryId !== undefined ? dto.countryId || undefined : address.countryId || undefined;
+            dto.countryId !== undefined
+                ? dto.countryId || undefined
+                : address.countryId || undefined;
 
         const nextStateId =
-            dto.stateId !== undefined ? dto.stateId || undefined : address.stateId || undefined;
+            dto.stateId !== undefined
+                ? dto.stateId || undefined
+                : address.stateId || undefined;
 
         const nextDistrictId =
-            dto.districtId !== undefined ? dto.districtId || undefined : address.districtId || undefined;
+            dto.districtId !== undefined
+                ? dto.districtId || undefined
+                : address.districtId || undefined;
 
         await this.validateGeoRefs(nextCountryId, nextStateId, nextDistrictId);
 
@@ -98,20 +111,50 @@ export class CustomerAddressesService {
             where: { id: address.id },
             data: {
                 ...(dto.type !== undefined ? { type: dto.type } : {}),
-                ...(dto.fullName !== undefined ? { fullName: dto.fullName?.trim() || null } : {}),
-                ...(dto.phone !== undefined ? { phone: dto.phone?.trim() || null } : {}),
-                ...(dto.addressLine1 !== undefined ? { addressLine1: dto.addressLine1.trim() } : {}),
-                ...(dto.addressLine2 !== undefined ? { addressLine2: dto.addressLine2?.trim() || null } : {}),
-                ...(dto.landmark !== undefined ? { landmark: dto.landmark?.trim() || null } : {}),
+                ...(dto.fullName !== undefined
+                    ? { fullName: dto.fullName?.trim() || null }
+                    : {}),
+                ...(dto.phone !== undefined
+                    ? { phone: dto.phone?.trim() || null }
+                    : {}),
+                ...(dto.addressLine1 !== undefined
+                    ? { addressLine1: dto.addressLine1.trim() }
+                    : {}),
+                ...(dto.addressLine2 !== undefined
+                    ? { addressLine2: dto.addressLine2?.trim() || null }
+                    : {}),
+                ...(dto.landmark !== undefined
+                    ? { landmark: dto.landmark?.trim() || null }
+                    : {}),
                 ...(dto.city !== undefined ? { city: dto.city.trim() } : {}),
-                ...(dto.district !== undefined ? { district: dto.district?.trim() || null } : {}),
-                ...(dto.state !== undefined ? { state: dto.state?.trim() || null } : {}),
-                ...(dto.country !== undefined ? { country: dto.country?.trim() || null } : {}),
-                ...(dto.postalCode !== undefined ? { postalCode: dto.postalCode?.trim() || null } : {}),
-                ...(dto.countryId !== undefined ? { countryId: dto.countryId || null } : {}),
-                ...(dto.stateId !== undefined ? { stateId: dto.stateId || null } : {}),
-                ...(dto.districtId !== undefined ? { districtId: dto.districtId || null } : {}),
-                ...(dto.isDefault !== undefined ? { isDefault: dto.isDefault } : {}),
+                ...(dto.postalCode !== undefined
+                    ? { postalCode: dto.postalCode?.trim() || null }
+                    : {}),
+
+                ...(dto.countryId !== undefined
+                    ? {
+                        countryId: dto.countryId || null,
+                        country: null,
+                    }
+                    : {}),
+
+                ...(dto.stateId !== undefined
+                    ? {
+                        stateId: dto.stateId || null,
+                        state: null,
+                    }
+                    : {}),
+
+                ...(dto.districtId !== undefined
+                    ? {
+                        districtId: dto.districtId || null,
+                        district: null,
+                    }
+                    : {}),
+
+                ...(dto.isDefault !== undefined
+                    ? { isDefault: dto.isDefault }
+                    : {}),
             },
             include: {
                 countryRef: true,
@@ -185,12 +228,23 @@ export class CustomerAddressesService {
         stateId?: string,
         districtId?: string,
     ) {
-        let country: { id: string } | null = null;
         let state: { id: string; countryId: string } | null = null;
         let district: { id: string; stateId: string } | null = null;
 
+        if (districtId && !stateId) {
+            throw new BadRequestException(
+                'stateId is required when districtId is provided',
+            );
+        }
+
+        if (stateId && !countryId) {
+            throw new BadRequestException(
+                'countryId is required when stateId is provided',
+            );
+        }
+
         if (countryId) {
-            country = await this.prisma.country.findFirst({
+            const country = await this.prisma.country.findFirst({
                 where: { id: countryId, isActive: true },
                 select: { id: true },
             });
@@ -211,7 +265,9 @@ export class CustomerAddressesService {
             }
 
             if (countryId && state.countryId !== countryId) {
-                throw new BadRequestException('Selected state does not belong to selected country');
+                throw new BadRequestException(
+                    'Selected state does not belong to selected country',
+                );
             }
         }
 
@@ -226,7 +282,9 @@ export class CustomerAddressesService {
             }
 
             if (stateId && district.stateId !== stateId) {
-                throw new BadRequestException('Selected district does not belong to selected state');
+                throw new BadRequestException(
+                    'Selected district does not belong to selected state',
+                );
             }
         }
     }

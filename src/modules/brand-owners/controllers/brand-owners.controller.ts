@@ -2,6 +2,8 @@ import {
     Body,
     Controller,
     Get,
+    Param,
+    ParseUUIDPipe,
     Patch,
     UseGuards,
 } from '@nestjs/common';
@@ -17,6 +19,8 @@ import type { JwtUser } from 'src/auth/types/jwt-user.type';
 import { BrandOwnersService } from '../services/brand-owners.service';
 import { UpdateBrandOwnerLocationDto } from '../dto/update-brand-owner-location.dto';
 import { UpdateBrandOwnerLanguageDto } from '../dto/update-brand-owner-language.dto';
+import { UpdateServiceAreaStateDto } from '../dto/update-service-area-state.dto';
+import { UpdateServiceAreaDistrictDto } from '../dto/update-service-area-district.dto';
 
 @ApiTags('Brand Owners')
 @ApiBearerAuth()
@@ -65,5 +69,52 @@ export class BrandOwnersController {
         @CurrentUser() user: JwtUser,
     ) {
         return this.service.updateMyLanguage(dto, user);
+    }
+
+    /* =====================================================
+       GET OWN SERVICE AREA SUMMARY
+       ===================================================== */
+    @Roles(Role.BRAND_OWNER)
+    @Get('me/service-area')
+    getMyServiceArea(@CurrentUser() user: JwtUser) {
+        return this.service.getMyServiceArea(user);
+    }
+
+    /* =====================================================
+       GET OWN SERVICE AREA DISTRICTS FOR A STATE
+       ===================================================== */
+    @Roles(Role.BRAND_OWNER)
+    @Get('me/service-area/states/:stateId/districts')
+    getMyServiceAreaDistricts(
+        @Param('stateId', new ParseUUIDPipe()) stateId: string,
+        @CurrentUser() user: JwtUser,
+    ) {
+        return this.service.getMyServiceAreaDistricts(stateId, user);
+    }
+
+    /* =====================================================
+       UPDATE OWN SERVICE AREA STATE
+       ===================================================== */
+    @Roles(Role.BRAND_OWNER)
+    @Patch('me/service-area/states/:stateId')
+    updateMyServiceAreaState(
+        @Param('stateId', new ParseUUIDPipe()) stateId: string,
+        @Body() dto: UpdateServiceAreaStateDto,
+        @CurrentUser() user: JwtUser,
+    ) {
+        return this.service.updateMyServiceAreaState(stateId, dto, user);
+    }
+
+    /* =====================================================
+       UPDATE OWN SERVICE AREA DISTRICT
+       ===================================================== */
+    @Roles(Role.BRAND_OWNER)
+    @Patch('me/service-area/districts/:districtId')
+    updateMyServiceAreaDistrict(
+        @Param('districtId', new ParseUUIDPipe()) districtId: string,
+        @Body() dto: UpdateServiceAreaDistrictDto,
+        @CurrentUser() user: JwtUser,
+    ) {
+        return this.service.updateMyServiceAreaDistrict(districtId, dto, user);
     }
 }

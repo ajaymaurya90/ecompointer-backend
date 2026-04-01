@@ -3,12 +3,13 @@ import {
     Injectable,
     NotFoundException,
 } from '@nestjs/common';
-import { Prisma, District } from '@prisma/client';
+import { Prisma, District, Role } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 import { CreateDistrictDto } from '../dto/create-district.dto';
 import { UpdateDistrictDto } from '../dto/update-district.dto';
 import { DistrictQueryDto } from '../dto/district-query.dto';
+import type { JwtUser } from 'src/auth/types/jwt-user.type';
 
 @Injectable()
 export class DistrictsService {
@@ -45,55 +46,18 @@ export class DistrictsService {
         });
     }
 
-    async findAll(query: DistrictQueryDto) {
+    async findAll(query: DistrictQueryDto, user?: JwtUser) {
         const where: Prisma.DistrictWhereInput = {};
 
         if (query.search?.trim()) {
             const search = query.search.trim();
 
             where.OR = [
-                {
-                    name: {
-                        contains: search,
-                        mode: 'insensitive',
-                    },
-                },
-                {
-                    state: {
-                        name: {
-                            contains: search,
-                            mode: 'insensitive',
-                        },
-                    },
-                },
-                {
-                    state: {
-                        code: {
-                            contains: search,
-                            mode: 'insensitive',
-                        },
-                    },
-                },
-                {
-                    state: {
-                        country: {
-                            name: {
-                                contains: search,
-                                mode: 'insensitive',
-                            },
-                        },
-                    },
-                },
-                {
-                    state: {
-                        country: {
-                            code: {
-                                contains: search,
-                                mode: 'insensitive',
-                            },
-                        },
-                    },
-                },
+                { name: { contains: search, mode: 'insensitive' } },
+                { state: { name: { contains: search, mode: 'insensitive' } } },
+                { state: { code: { contains: search, mode: 'insensitive' } } },
+                { state: { country: { name: { contains: search, mode: 'insensitive' } } } },
+                { state: { country: { code: { contains: search, mode: 'insensitive' } } } },
             ];
         }
 
@@ -102,16 +66,14 @@ export class DistrictsService {
         }
 
         if (query.countryId) {
-            where.state = {
-                countryId: query.countryId,
-            };
+            where.state = { countryId: query.countryId };
         }
 
         if (query.isActive !== undefined) {
             where.isActive = query.isActive === 'true';
         }
 
-        return this.prisma.district.findMany({
+        const districts = await this.prisma.district.findMany({
             where,
             include: {
                 state: {
@@ -135,6 +97,49 @@ export class DistrictsService {
                 { state: { name: 'asc' } },
                 { name: 'asc' },
             ],
+        });
+
+        // Apply Service Area filtering only for BRAND_OWNER
+        if (!user || user.role !== Role.BRAND_OWNER) {
+            return districts;
+        }
+
+        const brandOwner = await this.prisma.brandOwner.findUnique({
+            where: { userId: user.id },
+            select: { id: true },
+        });
+
+        if (!brandOwner) return districts;
+
+        // If parent state is disabled → return no districts
+        if (query.stateId) {
+            const stateOverride = await this.prisma.brandOwnerState.findUnique({
+                where: {
+                    brandOwnerId_stateId: {
+                        brandOwnerId: brandOwner.id,
+                        stateId: query.stateId,
+                    },
+                },
+            });
+
+            if (stateOverride?.isActive === false) {
+                return [];
+            }
+        }
+
+        const overrides = await this.prisma.brandOwnerDistrict.findMany({
+            where: { brandOwnerId: brandOwner.id },
+            select: { districtId: true, isActive: true },
+        });
+
+        const overrideMap = new Map(
+            overrides.map((o) => [o.districtId, o.isActive])
+        );
+
+        // Remove districts explicitly disabled
+        return districts.filter((district) => {
+            const override = overrideMap.get(district.id);
+            return override !== false;
         });
     }
 
@@ -212,9 +217,7 @@ export class DistrictsService {
         const data: Prisma.DistrictUpdateInput = {};
 
         if (dto.stateId !== undefined) {
-            data.state = {
-                connect: { id: dto.stateId },
-            };
+            data.state = { connect: { id: dto.stateId } };
         }
 
         if (dto.name !== undefined) {

@@ -21,6 +21,8 @@ import { StatesService } from '../services/states.service';
 import { CreateStateDto } from '../dto/create-state.dto';
 import { UpdateStateDto } from '../dto/update-state.dto';
 import { StateQueryDto } from '../dto/state-query.dto';
+import type { JwtUser } from 'src/auth/types/jwt-user.type';
+import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
 
 @ApiTags('States')
 @UseGuards(JwtGuard, RolesGuard)
@@ -51,8 +53,11 @@ export class StatesController {
        ============================= */
     @Roles(Role.SUPER_ADMIN, Role.BRAND_OWNER)
     @Get()
-    findAll(@Query() query: StateQueryDto) {
-        return this.statesService.findAll(query);
+    findAll(
+        @Query() query: StateQueryDto,
+        @CurrentUser() user: JwtUser,
+    ) {
+        return this.statesService.findAll(query, user);
     }
 
     /* =============================

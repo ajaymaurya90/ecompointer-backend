@@ -4,11 +4,12 @@ import {
     NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { Prisma, State } from '@prisma/client';
+import { Prisma, State, Role } from '@prisma/client';
 
 import { CreateStateDto } from '../dto/create-state.dto';
 import { UpdateStateDto } from '../dto/update-state.dto';
 import { StateQueryDto } from '../dto/state-query.dto';
+import type { JwtUser } from 'src/auth/types/jwt-user.type';
 
 @Injectable()
 export class StatesService {
@@ -47,41 +48,17 @@ export class StatesService {
         });
     }
 
-    async findAll(query: StateQueryDto) {
+    async findAll(query: StateQueryDto, user?: JwtUser) {
         const where: Prisma.StateWhereInput = {};
 
         if (query.search?.trim()) {
             const search = query.search.trim();
 
             where.OR = [
-                {
-                    name: {
-                        contains: search,
-                        mode: 'insensitive',
-                    },
-                },
-                {
-                    code: {
-                        contains: search,
-                        mode: 'insensitive',
-                    },
-                },
-                {
-                    country: {
-                        name: {
-                            contains: search,
-                            mode: 'insensitive',
-                        },
-                    },
-                },
-                {
-                    country: {
-                        code: {
-                            contains: search,
-                            mode: 'insensitive',
-                        },
-                    },
-                },
+                { name: { contains: search, mode: 'insensitive' } },
+                { code: { contains: search, mode: 'insensitive' } },
+                { country: { name: { contains: search, mode: 'insensitive' } } },
+                { country: { code: { contains: search, mode: 'insensitive' } } },
             ];
         }
 
@@ -93,7 +70,7 @@ export class StatesService {
             where.isActive = query.isActive === 'true';
         }
 
-        return this.prisma.state.findMany({
+        const states = await this.prisma.state.findMany({
             where,
             include: {
                 country: {
@@ -108,6 +85,33 @@ export class StatesService {
                 { country: { name: 'asc' } },
                 { name: 'asc' },
             ],
+        });
+
+        // Apply Service Area filtering only for BRAND_OWNER
+        if (!user || user.role !== Role.BRAND_OWNER) {
+            return states;
+        }
+
+        const brandOwner = await this.prisma.brandOwner.findUnique({
+            where: { userId: user.id },
+            select: { id: true },
+        });
+
+        if (!brandOwner) return states;
+
+        const overrides = await this.prisma.brandOwnerState.findMany({
+            where: { brandOwnerId: brandOwner.id },
+            select: { stateId: true, isActive: true },
+        });
+
+        const overrideMap = new Map(
+            overrides.map((o) => [o.stateId, o.isActive])
+        );
+
+        // Remove states explicitly disabled by Brand Owner
+        return states.filter((state) => {
+            const override = overrideMap.get(state.id);
+            return override !== false;
         });
     }
 
@@ -177,9 +181,7 @@ export class StatesService {
         const data: Prisma.StateUpdateInput = {};
 
         if (dto.countryId !== undefined) {
-            data.country = {
-                connect: { id: dto.countryId },
-            };
+            data.country = { connect: { id: dto.countryId } };
         }
 
         if (dto.name !== undefined) {
