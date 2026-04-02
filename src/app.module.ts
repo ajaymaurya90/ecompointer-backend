@@ -13,7 +13,7 @@ import { CountriesModule } from './modules/master-data/countries/countries.modul
 import { StatesModule } from './modules/master-data/states/states.module';
 import { DistrictsModule } from './modules/master-data/districts/districts.module';
 import { BrandOwnersModule } from './modules/brand-owners/brand-owners.module';
-
+import { OrdersModule } from './modules/orders/orders.module';
 
 @Module({
   imports: [
@@ -31,7 +31,8 @@ import { BrandOwnersModule } from './modules/brand-owners/brand-owners.module';
     CountriesModule,
     StatesModule,
     DistrictsModule,
-    BrandOwnersModule
+    BrandOwnersModule,
+    OrdersModule
   ],
   controllers: [AppController],
 })
