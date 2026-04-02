@@ -143,6 +143,50 @@ export class OrdersService {
             throw new BadRequestException('shopOwnerId is required for SHOP_OWNER order');
         }
 
+        // Load brand owner order rules so shop-owner orders can be validated dynamically.
+        const brandOwner = await this.prisma.brandOwner.findUnique({
+            where: { id: brandOwnerId },
+            select: {
+                id: true,
+                minShopOrderLineQty: true,
+                minShopOrderCartQty: true,
+                allowBelowMinLineQtyAfterCartMin: true,
+            },
+        });
+
+        if (!brandOwner) {
+            throw new NotFoundException('Brand owner not found');
+        }
+
+        // Validate shop-owner wholesale ordering rules from brand owner settings.
+        if (buyerType === BuyerType.SHOP_OWNER) {
+            const minLineQty = brandOwner.minShopOrderLineQty ?? 3;
+            const minCartQty = brandOwner.minShopOrderCartQty ?? 10;
+            const allowBelowMinLineQtyAfterCartMin =
+                brandOwner.allowBelowMinLineQtyAfterCartMin ?? true;
+
+            const totalCartQty = items.reduce((sum, item) => sum + item.quantity, 0);
+
+            if (totalCartQty < minCartQty) {
+                throw new BadRequestException(
+                    `Shop owner order must have at least total quantity ${minCartQty}`,
+                );
+            }
+
+            const shouldEnforceLineMin =
+                !allowBelowMinLineQtyAfterCartMin || totalCartQty < minCartQty;
+
+            if (shouldEnforceLineMin) {
+                const invalidLine = items.find((item) => item.quantity < minLineQty);
+
+                if (invalidLine) {
+                    throw new BadRequestException(
+                        `Each shop owner order line must have at least quantity ${minLineQty}`,
+                    );
+                }
+            }
+        }
+
         // Load buyer snapshot according to order type.
         let buyerName = '';
         let buyerEmail: string | null = null;

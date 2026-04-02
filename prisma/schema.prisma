@@ -348,6 +348,10 @@ model BrandOwner {
   brandOwnerStates    BrandOwnerState[]
   brandOwnerDistricts BrandOwnerDistrict[]
 
+  minShopOrderLineQty              Int     @default(3)
+  minShopOrderCartQty              Int     @default(10)
+  allowBelowMinLineQtyAfterCartMin Boolean @default(true)
+
   countryId  String?
   stateId    String?
   districtId String?

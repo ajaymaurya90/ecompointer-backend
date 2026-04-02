@@ -11,15 +11,12 @@
  * 5. Support pagination & optional brand filtering
  *
  * Routes:
- * POST    /products            → Create product
- * GET     /products/:id        → Get single product (with relations)
- * GET     /products            → Paginated product list
- * PATCH   /products/:id        → Update product
- * DELETE  /products/:id        → Soft delete product
- *
- * Notes:
- * - Owner validation temporarily disabled (planned for auth integration)
- * - Controller remains thin (no business logic here)
+ * POST    /products                    → Create product
+ * GET     /products/order-search       → Lightweight variant search for order create
+ * GET     /products/:id                → Get single product (with relations)
+ * GET     /products                    → Paginated product list
+ * PATCH   /products/:id                → Update product
+ * DELETE  /products/:id                → Soft delete product
  * ---------------------------------------------------------
  */
 import {
@@ -37,7 +34,7 @@ import {
 import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiParam } from '@nestjs/swagger';
+import { ApiTags } from '@nestjs/swagger';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { JwtGuard } from 'src/auth/jwt.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -61,6 +58,18 @@ export class ProductController {
         @CurrentUser() user: JwtUser,
     ) {
         return this.service.create(dto, user);
+    }
+
+    /* =============================
+       ORDER SEARCH (Lightweight)
+       ============================= */
+    @Roles(Role.BRAND_OWNER, Role.SHOP_OWNER, Role.SUPER_ADMIN)
+    @Get('order-search')
+    orderSearch(
+        @CurrentUser() user: JwtUser,
+        @Query('search') search?: string,
+    ) {
+        return this.service.orderSearch(user, search);
     }
 
     /* =============================

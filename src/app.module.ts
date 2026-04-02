@@ -14,6 +14,7 @@ import { StatesModule } from './modules/master-data/states/states.module';
 import { DistrictsModule } from './modules/master-data/districts/districts.module';
 import { BrandOwnersModule } from './modules/brand-owners/brand-owners.module';
 import { OrdersModule } from './modules/orders/orders.module';
+import { ShopOwnersModule } from './modules/shop-owners/shop-owners.module';
 
 @Module({
   imports: [
@@ -32,7 +33,8 @@ import { OrdersModule } from './modules/orders/orders.module';
     StatesModule,
     DistrictsModule,
     BrandOwnersModule,
-    OrdersModule
+    OrdersModule,
+    ShopOwnersModule
   ],
   controllers: [AppController],
 })
