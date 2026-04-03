@@ -3,11 +3,11 @@ import {
     Injectable,
     NotFoundException,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { CreateBrandDto } from './dto/create-brand.dto';
-import { UpdateBrandDto } from './dto/update-brand.dto';
+import { PrismaService } from 'src/prisma/prisma.service';
+import { CreateBrandDto } from '../dto/create-brand.dto';
+import { UpdateBrandDto } from '../dto/update-brand.dto';
 import { Role } from '@prisma/client';
-import type { JwtUser } from '../auth/types/jwt-user.type';
+import type { JwtUser } from 'src/auth/types/jwt-user.type';
 
 @Injectable()
 export class BrandService {

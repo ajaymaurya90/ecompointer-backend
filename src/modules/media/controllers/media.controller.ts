@@ -42,12 +42,12 @@ import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { v4 as uuid } from 'uuid';
 
-import { MediaService } from './media.service';
-import { CreateMediaDto } from './dto/create-media.dto';
-import { UpdateMediaDto } from './dto/update-media.dto';
-import { JwtGuard } from '../auth/jwt.guard';
-import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import type { JwtUser } from '../auth/types/jwt-user.type';
+import { MediaService } from '../services/media.service';
+import { CreateMediaDto } from '../dto/create-media.dto';
+import { UpdateMediaDto } from '../dto/update-media.dto';
+import { JwtGuard } from 'src/auth/jwt.guard';
+import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
+import type { JwtUser } from 'src/auth/types/jwt-user.type';
 
 @ApiTags('Media')
 @ApiBearerAuth()

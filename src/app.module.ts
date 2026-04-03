@@ -3,11 +3,11 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
-import { BrandModule } from './brand/brand.module';
+import { BrandModule } from './modules/brand/brand.module';
 import { ProductCategoryModule } from './product-category/product-category.module';
 import { ProductModule } from './product/product.module';
 import { ProductVariantModule } from './product-variant/product-variant.module';
-import { MediaModule } from './media/media.module';
+import { MediaModule } from './modules/media/media.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { CountriesModule } from './modules/master-data/countries/countries.module';
 import { StatesModule } from './modules/master-data/states/states.module';
@@ -15,6 +15,7 @@ import { DistrictsModule } from './modules/master-data/districts/districts.modul
 import { BrandOwnersModule } from './modules/brand-owners/brand-owners.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { ShopOwnersModule } from './modules/shop-owners/shop-owners.module';
+import { StorefrontModule } from './modules/storefront/storefront.module';
 
 @Module({
   imports: [
@@ -34,7 +35,8 @@ import { ShopOwnersModule } from './modules/shop-owners/shop-owners.module';
     DistrictsModule,
     BrandOwnersModule,
     OrdersModule,
-    ShopOwnersModule
+    ShopOwnersModule,
+    StorefrontModule
   ],
   controllers: [AppController],
 })

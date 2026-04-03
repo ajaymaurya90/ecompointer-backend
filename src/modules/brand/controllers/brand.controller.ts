@@ -8,15 +8,15 @@ import {
     Patch,
     Delete,
 } from '@nestjs/common';
-import { BrandService } from './brand.service';
-import { CreateBrandDto } from './dto/create-brand.dto';
-import { UpdateBrandDto } from './dto/update-brand.dto';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { JwtGuard } from '../auth/jwt.guard';
+import { BrandService } from '../services/brand.service';
+import { CreateBrandDto } from '../dto/create-brand.dto';
+import { UpdateBrandDto } from '../dto/update-brand.dto';
+import { Roles } from 'src/auth/decorators/roles.decorator';
+import { RolesGuard } from 'src/auth/guards/roles.guard';
+import { JwtGuard } from 'src/auth/jwt.guard';
 import { Role } from '@prisma/client';
-import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import type { JwtUser } from '../auth/types/jwt-user.type';
+import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
+import type { JwtUser } from 'src/auth/types/jwt-user.type';
 
 @UseGuards(JwtGuard, RolesGuard)
 @Controller('brand')

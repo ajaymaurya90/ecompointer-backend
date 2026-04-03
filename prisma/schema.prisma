@@ -352,6 +352,10 @@ model BrandOwner {
   minShopOrderCartQty              Int     @default(10)
   allowBelowMinLineQtyAfterCartMin Boolean @default(true)
 
+  storefrontSetting BrandOwnerStorefrontSetting?
+  storefrontTheme   BrandOwnerStorefrontTheme?
+  customerAuths     CustomerAuth[]
+
   countryId  String?
   stateId    String?
   districtId String?
@@ -804,6 +808,8 @@ model Customer {
   addresses    CustomerAddress[]
   groupMembers CustomerGroupMember[]
 
+  auth CustomerAuth?
+
   orders Order[]
 
   createdAt DateTime @default(now())
@@ -1145,4 +1151,79 @@ model Media {
 
   @@index([productId])
   @@index([variantId])
+}
+
+//////////////////////////////
+// STOREFRONT DOMAIN
+//////////////////////////////
+
+//////////////////////////////
+// STOREFRONT DOMAIN
+//////////////////////////////
+
+model BrandOwnerStorefrontSetting {
+  id           String     @id @default(uuid())
+  brandOwnerId String     @unique
+  brandOwner   BrandOwner @relation(fields: [brandOwnerId], references: [id], onDelete: Cascade)
+
+  storefrontName String?
+  logoUrl        String?
+  faviconUrl     String?
+  supportEmail   String?
+  supportPhone   String?
+
+  isStorefrontEnabled           Boolean @default(true)
+  isGuestCheckoutEnabled        Boolean @default(true)
+  isCustomerRegistrationEnabled Boolean @default(true)
+
+  primaryColor   String?
+  secondaryColor String?
+  currencyCode   String  @default("INR")
+
+  seoTitle       String?
+  seoDescription String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([brandOwnerId])
+}
+
+model BrandOwnerStorefrontTheme {
+  id           String     @id @default(uuid())
+  brandOwnerId String     @unique
+  brandOwner   BrandOwner @relation(fields: [brandOwnerId], references: [id], onDelete: Cascade)
+
+  activeThemeCode String  @default("default")
+  isThemeActive   Boolean @default(true)
+  themeConfigJson Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([brandOwnerId])
+}
+
+model CustomerAuth {
+  id         String   @id @default(uuid())
+  customerId String   @unique
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  brandOwnerId String
+  brandOwner   BrandOwner @relation(fields: [brandOwnerId], references: [id], onDelete: Cascade)
+
+  email        String
+  passwordHash String
+  isActive     Boolean @default(true)
+
+  refreshToken String?
+  tokenVersion Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([brandOwnerId, email])
+  @@index([customerId])
+  @@index([brandOwnerId])
+  @@index([email])
 }
