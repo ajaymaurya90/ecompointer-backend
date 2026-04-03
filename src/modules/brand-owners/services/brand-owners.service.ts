@@ -13,6 +13,7 @@ import { UpdateBrandOwnerLocationDto } from '../dto/update-brand-owner-location.
 import { UpdateBrandOwnerLanguageDto } from '../dto/update-brand-owner-language.dto';
 import { UpdateServiceAreaStateDto } from '../dto/update-service-area-state.dto';
 import { UpdateServiceAreaDistrictDto } from '../dto/update-service-area-district.dto';
+import { UpdateBrandOwnerShopOrderRulesDto } from '../dto/update-brand-owner-shop-order-rules.dto';
 
 @Injectable()
 export class BrandOwnersService {
@@ -644,6 +645,85 @@ export class BrandOwnersService {
                 source: dto.isActive === inheritedDefault ? 'default' : 'override',
             },
         };
+    }
+
+    /* =====================================================
+   GET OWN SHOP ORDER RULES
+   ===================================================== */
+    async getMyShopOrderRules(user: JwtUser) {
+        const brandOwner = await this.getOwnedBrandOwner(user);
+
+        return this.prisma.brandOwner.findUnique({
+            where: { id: brandOwner.id },
+            select: {
+                id: true,
+                businessName: true,
+                minShopOrderLineQty: true,
+                minShopOrderCartQty: true,
+                allowBelowMinLineQtyAfterCartMin: true,
+            },
+        });
+    }
+
+    /* =====================================================
+       UPDATE OWN SHOP ORDER RULES
+       ===================================================== */
+    async updateMyShopOrderRules(
+        dto: UpdateBrandOwnerShopOrderRulesDto,
+        user: JwtUser,
+    ) {
+        const brandOwner = await this.getOwnedBrandOwner(user);
+
+        const current = await this.prisma.brandOwner.findUnique({
+            where: { id: brandOwner.id },
+            select: {
+                id: true,
+                minShopOrderLineQty: true,
+                minShopOrderCartQty: true,
+                allowBelowMinLineQtyAfterCartMin: true,
+            },
+        });
+
+        if (!current) {
+            throw new NotFoundException('BrandOwner not found');
+        }
+
+        const nextMinLineQty =
+            dto.minShopOrderLineQty ?? current.minShopOrderLineQty;
+
+        const nextMinCartQty =
+            dto.minShopOrderCartQty ?? current.minShopOrderCartQty;
+
+        if (nextMinLineQty > nextMinCartQty) {
+            throw new BadRequestException(
+                'minShopOrderLineQty cannot be greater than minShopOrderCartQty',
+            );
+        }
+
+        return this.prisma.brandOwner.update({
+            where: { id: brandOwner.id },
+            data: {
+                ...(dto.minShopOrderLineQty !== undefined
+                    ? { minShopOrderLineQty: dto.minShopOrderLineQty }
+                    : {}),
+                ...(dto.minShopOrderCartQty !== undefined
+                    ? { minShopOrderCartQty: dto.minShopOrderCartQty }
+                    : {}),
+                ...(dto.allowBelowMinLineQtyAfterCartMin !== undefined
+                    ? {
+                        allowBelowMinLineQtyAfterCartMin:
+                            dto.allowBelowMinLineQtyAfterCartMin,
+                    }
+                    : {}),
+            },
+            select: {
+                id: true,
+                businessName: true,
+                minShopOrderLineQty: true,
+                minShopOrderCartQty: true,
+                allowBelowMinLineQtyAfterCartMin: true,
+            },
+        });
     }
 
     /* =====================================================

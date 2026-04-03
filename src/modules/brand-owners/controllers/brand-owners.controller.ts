@@ -21,6 +21,7 @@ import { UpdateBrandOwnerLocationDto } from '../dto/update-brand-owner-location.
 import { UpdateBrandOwnerLanguageDto } from '../dto/update-brand-owner-language.dto';
 import { UpdateServiceAreaStateDto } from '../dto/update-service-area-state.dto';
 import { UpdateServiceAreaDistrictDto } from '../dto/update-service-area-district.dto';
+import { UpdateBrandOwnerShopOrderRulesDto } from '../dto/update-brand-owner-shop-order-rules.dto';
 
 @ApiTags('Brand Owners')
 @ApiBearerAuth()
@@ -116,5 +117,26 @@ export class BrandOwnersController {
         @CurrentUser() user: JwtUser,
     ) {
         return this.service.updateMyServiceAreaDistrict(districtId, dto, user);
+    }
+
+    /* =====================================================
+   GET OWN SHOP ORDER RULES
+   ===================================================== */
+    @Roles(Role.BRAND_OWNER)
+    @Get('me/shop-order-rules')
+    getMyShopOrderRules(@CurrentUser() user: JwtUser) {
+        return this.service.getMyShopOrderRules(user);
+    }
+
+    /* =====================================================
+       UPDATE OWN SHOP ORDER RULES
+       ===================================================== */
+    @Roles(Role.BRAND_OWNER)
+    @Patch('me/shop-order-rules')
+    updateMyShopOrderRules(
+        @Body() dto: UpdateBrandOwnerShopOrderRulesDto,
+        @CurrentUser() user: JwtUser,
+    ) {
+        return this.service.updateMyShopOrderRules(dto, user);
     }
 }
