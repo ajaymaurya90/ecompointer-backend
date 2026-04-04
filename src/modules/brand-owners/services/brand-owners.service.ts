@@ -14,6 +14,9 @@ import { UpdateBrandOwnerLanguageDto } from '../dto/update-brand-owner-language.
 import { UpdateServiceAreaStateDto } from '../dto/update-service-area-state.dto';
 import { UpdateServiceAreaDistrictDto } from '../dto/update-service-area-district.dto';
 import { UpdateBrandOwnerShopOrderRulesDto } from '../dto/update-brand-owner-shop-order-rules.dto';
+import { UpdateBrandOwnerStorefrontSettingsDto } from '../dto/update-brand-owner-storefront-settings.dto';
+import { CreateBrandOwnerStorefrontDomainDto } from '../dto/create-brand-owner-storefront-domain.dto';
+import { UpdateBrandOwnerStorefrontDomainDto } from '../dto/update-brand-owner-storefront-domain.dto';
 
 @Injectable()
 export class BrandOwnersService {
@@ -96,6 +99,7 @@ export class BrandOwnersService {
             throw new NotFoundException('BrandOwner not found');
         }
 
+        // Resolve next geo ids before validation so partial updates still validate correctly.
         const nextCountryId =
             dto.countryId !== undefined
                 ? dto.countryId || undefined
@@ -111,6 +115,7 @@ export class BrandOwnersService {
                 ? dto.districtId || undefined
                 : current.districtId || undefined;
 
+        // Validate geo reference consistency across country, state, and district.
         await this.validateGeoRefs(nextCountryId, nextStateId, nextDistrictId);
 
         return this.prisma.brandOwner.update({
@@ -118,21 +123,18 @@ export class BrandOwnersService {
             data: {
                 ...(dto.address !== undefined ? { address: dto.address.trim() } : {}),
                 ...(dto.city !== undefined ? { city: dto.city.trim() } : {}),
-
                 ...(dto.countryId !== undefined
                     ? {
                         countryId: dto.countryId || null,
                         country: null,
                     }
                     : {}),
-
                 ...(dto.stateId !== undefined
                     ? {
                         stateId: dto.stateId || null,
                         state: null,
                     }
                     : {}),
-
                 ...(dto.districtId !== undefined
                     ? {
                         districtId: dto.districtId || null,
@@ -322,6 +324,7 @@ export class BrandOwnersService {
 
         const inactiveDistrictOverrideCountMap = new Map<string, number>();
 
+        // Count district-level inactive overrides per state so effective totals stay accurate.
         for (const item of districtOverrides) {
             if (item.isActive === false) {
                 const currentCount =
@@ -343,6 +346,7 @@ export class BrandOwnersService {
             if (isActive) {
                 const inactiveOverrideCount =
                     inactiveDistrictOverrideCountMap.get(state.id) || 0;
+
                 activeDistrictCount = Math.max(
                     districtCount - inactiveOverrideCount,
                     0,
@@ -446,6 +450,7 @@ export class BrandOwnersService {
         const effectiveDistricts = districts.map((district) => {
             const override = districtOverrideMap.get(district.id);
 
+            // District inherits active state from parent unless there is an explicit override.
             const isActive = effectiveStateActive
                 ? override !== undefined
                     ? override
@@ -511,6 +516,7 @@ export class BrandOwnersService {
 
         const inheritedDefault = true;
 
+        // Delete override row when requested value matches inherited default state.
         if (dto.isActive === inheritedDefault) {
             await this.prisma.brandOwnerState.deleteMany({
                 where: {
@@ -519,6 +525,7 @@ export class BrandOwnersService {
                 },
             });
         } else {
+            // Upsert override row when BO intentionally differs from master default.
             await this.prisma.brandOwnerState.upsert({
                 where: {
                     brandOwnerId_stateId: {
@@ -602,6 +609,7 @@ export class BrandOwnersService {
         const effectiveParentStateActive =
             stateOverride?.isActive !== undefined ? stateOverride.isActive : true;
 
+        // Prevent impossible district activation when parent state is disabled.
         if (!effectiveParentStateActive && dto.isActive === true) {
             throw new BadRequestException(
                 'Cannot activate a district while its parent state is inactive',
@@ -610,6 +618,7 @@ export class BrandOwnersService {
 
         const inheritedDefault = effectiveParentStateActive;
 
+        // Delete override row when requested value matches inherited parent behavior.
         if (dto.isActive === inheritedDefault) {
             await this.prisma.brandOwnerDistrict.deleteMany({
                 where: {
@@ -618,6 +627,7 @@ export class BrandOwnersService {
                 },
             });
         } else {
+            // Upsert override row when BO intentionally differs from inherited state behavior.
             await this.prisma.brandOwnerDistrict.upsert({
                 where: {
                     brandOwnerId_districtId: {
@@ -648,8 +658,8 @@ export class BrandOwnersService {
     }
 
     /* =====================================================
-   GET OWN SHOP ORDER RULES
-   ===================================================== */
+       GET OWN SHOP ORDER RULES
+       ===================================================== */
     async getMyShopOrderRules(user: JwtUser) {
         const brandOwner = await this.getOwnedBrandOwner(user);
 
@@ -688,6 +698,7 @@ export class BrandOwnersService {
             throw new NotFoundException('BrandOwner not found');
         }
 
+        // Resolve final rule values first so cross-field validation uses actual next state.
         const nextMinLineQty =
             dto.minShopOrderLineQty ?? current.minShopOrderLineQty;
 
@@ -724,6 +735,423 @@ export class BrandOwnersService {
                 allowBelowMinLineQtyAfterCartMin: true,
             },
         });
+    }
+
+    /* =====================================================
+       GET OWN STOREFRONT SETTINGS
+       ===================================================== */
+    async getMyStorefrontSettings(user: JwtUser) {
+        const brandOwner = await this.getOwnedBrandOwner(user);
+
+        // Ensure default storefront setting + theme rows exist for existing BOs.
+        await this.ensureStorefrontDefaults(brandOwner.id);
+
+        const [setting, theme] = await this.prisma.$transaction([
+            this.prisma.brandOwnerStorefrontSetting.findUnique({
+                where: { brandOwnerId: brandOwner.id },
+            }),
+            this.prisma.brandOwnerStorefrontTheme.findUnique({
+                where: { brandOwnerId: brandOwner.id },
+            }),
+        ]);
+
+        return {
+            id: brandOwner.id,
+            businessName: await this.getBrandOwnerBusinessName(brandOwner.id),
+            storefrontName: setting?.storefrontName ?? null,
+            storefrontLogoUrl: setting?.logoUrl ?? null,
+            storefrontTagline: setting?.tagline ?? null,
+            storefrontShortDescription: setting?.shortDescription ?? null,
+            storefrontAboutDescription: setting?.aboutDescription ?? null,
+            storefrontSupportEmail: setting?.supportEmail ?? null,
+            storefrontSupportPhone: setting?.supportPhone ?? null,
+            isStorefrontEnabled: setting?.isStorefrontEnabled ?? false,
+            isGuestCheckoutEnabled: setting?.isGuestCheckoutEnabled ?? true,
+            isCustomerRegistrationEnabled:
+                setting?.isCustomerRegistrationEnabled ?? true,
+            activeStorefrontThemeCode: theme?.activeThemeCode ?? 'default',
+            isStorefrontThemeActive: theme?.isThemeActive ?? true,
+        };
+    }
+
+    /* =====================================================
+       UPDATE OWN STOREFRONT SETTINGS
+       ===================================================== */
+    async updateMyStorefrontSettings(
+        dto: UpdateBrandOwnerStorefrontSettingsDto,
+        user: JwtUser,
+    ) {
+        const brandOwner = await this.getOwnedBrandOwner(user);
+
+        // Ensure storefront rows exist before partial update is applied.
+        await this.ensureStorefrontDefaults(brandOwner.id);
+
+        const [updatedSetting, updatedTheme, businessName] =
+            await this.prisma.$transaction(async (tx) => {
+                const setting = await tx.brandOwnerStorefrontSetting.update({
+                    where: { brandOwnerId: brandOwner.id },
+                    data: {
+                        ...(dto.storefrontName !== undefined
+                            ? { storefrontName: this.toNullableTrimmed(dto.storefrontName) }
+                            : {}),
+                        ...(dto.storefrontLogoUrl !== undefined
+                            ? { logoUrl: this.toNullableTrimmed(dto.storefrontLogoUrl) }
+                            : {}),
+                        ...(dto.storefrontTagline !== undefined
+                            ? { tagline: this.toNullableTrimmed(dto.storefrontTagline) }
+                            : {}),
+                        ...(dto.storefrontShortDescription !== undefined
+                            ? {
+                                shortDescription: this.toNullableTrimmed(
+                                    dto.storefrontShortDescription,
+                                ),
+                            }
+                            : {}),
+                        ...(dto.storefrontAboutDescription !== undefined
+                            ? {
+                                aboutDescription: this.toNullableTrimmed(
+                                    dto.storefrontAboutDescription,
+                                ),
+                            }
+                            : {}),
+                        ...(dto.storefrontSupportEmail !== undefined
+                            ? {
+                                supportEmail: this.toNullableTrimmed(
+                                    dto.storefrontSupportEmail,
+                                ),
+                            }
+                            : {}),
+                        ...(dto.storefrontSupportPhone !== undefined
+                            ? {
+                                supportPhone: this.toNullableTrimmed(
+                                    dto.storefrontSupportPhone,
+                                ),
+                            }
+                            : {}),
+                        ...(dto.isStorefrontEnabled !== undefined
+                            ? { isStorefrontEnabled: dto.isStorefrontEnabled }
+                            : {}),
+                        ...(dto.isGuestCheckoutEnabled !== undefined
+                            ? {
+                                isGuestCheckoutEnabled:
+                                    dto.isGuestCheckoutEnabled,
+                            }
+                            : {}),
+                        ...(dto.isCustomerRegistrationEnabled !== undefined
+                            ? {
+                                isCustomerRegistrationEnabled:
+                                    dto.isCustomerRegistrationEnabled,
+                            }
+                            : {}),
+                    },
+                });
+
+                const theme = await tx.brandOwnerStorefrontTheme.update({
+                    where: { brandOwnerId: brandOwner.id },
+                    data: {
+                        ...(dto.activeStorefrontThemeCode !== undefined
+                            ? {
+                                activeThemeCode:
+                                    this.toNullableTrimmed(
+                                        dto.activeStorefrontThemeCode,
+                                    ) ?? 'default',
+                            }
+                            : {}),
+                        ...(dto.isStorefrontThemeActive !== undefined
+                            ? { isThemeActive: dto.isStorefrontThemeActive }
+                            : {}),
+                    },
+                });
+
+                const owner = await tx.brandOwner.findUnique({
+                    where: { id: brandOwner.id },
+                    select: { businessName: true },
+                });
+
+                return [setting, theme, owner?.businessName ?? null] as const;
+            });
+
+        return {
+            id: brandOwner.id,
+            businessName: businessName,
+            storefrontName: updatedSetting.storefrontName ?? null,
+            storefrontLogoUrl: updatedSetting.logoUrl ?? null,
+            storefrontTagline: updatedSetting.tagline ?? null,
+            storefrontShortDescription: updatedSetting.shortDescription ?? null,
+            storefrontAboutDescription: updatedSetting.aboutDescription ?? null,
+            storefrontSupportEmail: updatedSetting.supportEmail ?? null,
+            storefrontSupportPhone: updatedSetting.supportPhone ?? null,
+            isStorefrontEnabled: updatedSetting.isStorefrontEnabled,
+            isGuestCheckoutEnabled: updatedSetting.isGuestCheckoutEnabled,
+            isCustomerRegistrationEnabled:
+                updatedSetting.isCustomerRegistrationEnabled,
+            activeStorefrontThemeCode: updatedTheme.activeThemeCode,
+            isStorefrontThemeActive: updatedTheme.isThemeActive,
+        };
+    }
+
+    /* =====================================================
+   LIST OWN STOREFRONT DOMAINS
+   ===================================================== */
+    async getMyStorefrontDomains(user: JwtUser) {
+        const brandOwner = await this.getOwnedBrandOwner(user);
+
+        return this.prisma.brandOwnerStorefrontDomain.findMany({
+            where: {
+                brandOwnerId: brandOwner.id,
+            },
+            orderBy: [
+                { isPrimary: 'desc' },
+                { createdAt: 'asc' },
+            ],
+            select: {
+                id: true,
+                brandOwnerId: true,
+                hostName: true,
+                isPrimary: true,
+                isActive: true,
+                isVerified: true,
+                createdAt: true,
+                updatedAt: true,
+            },
+        });
+    }
+
+    /* =====================================================
+       CREATE OWN STOREFRONT DOMAIN
+       ===================================================== */
+    async createMyStorefrontDomain(
+        dto: CreateBrandOwnerStorefrontDomainDto,
+        user: JwtUser,
+    ) {
+        const brandOwner = await this.getOwnedBrandOwner(user);
+
+        // Normalize host before save so DB lookup stays consistent.
+        const normalizedHost = this.normalizeStorefrontDomainHost(dto.hostName);
+
+        const existing = await this.prisma.brandOwnerStorefrontDomain.findFirst({
+            where: {
+                hostName: normalizedHost,
+            },
+            select: {
+                id: true,
+                brandOwnerId: true,
+            },
+        });
+
+        if (existing) {
+            throw new BadRequestException('This storefront domain already exists');
+        }
+
+        const shouldBePrimary = dto.isPrimary ?? false;
+        const shouldBeActive = dto.isActive ?? true;
+
+        const created = await this.prisma.$transaction(async (tx) => {
+            // When a new domain becomes primary, reset previous primary flags first.
+            if (shouldBePrimary) {
+                await tx.brandOwnerStorefrontDomain.updateMany({
+                    where: {
+                        brandOwnerId: brandOwner.id,
+                        isPrimary: true,
+                    },
+                    data: {
+                        isPrimary: false,
+                    },
+                });
+            }
+
+            return tx.brandOwnerStorefrontDomain.create({
+                data: {
+                    brandOwnerId: brandOwner.id,
+                    hostName: normalizedHost,
+                    isPrimary: shouldBePrimary,
+                    isActive: shouldBeActive,
+                    isVerified: false,
+                },
+                select: {
+                    id: true,
+                    brandOwnerId: true,
+                    hostName: true,
+                    isPrimary: true,
+                    isActive: true,
+                    isVerified: true,
+                    createdAt: true,
+                    updatedAt: true,
+                },
+            });
+        });
+
+        return created;
+    }
+
+    /* =====================================================
+       UPDATE OWN STOREFRONT DOMAIN
+       ===================================================== */
+    async updateMyStorefrontDomain(
+        domainId: string,
+        dto: UpdateBrandOwnerStorefrontDomainDto,
+        user: JwtUser,
+    ) {
+        const brandOwner = await this.getOwnedBrandOwner(user);
+
+        const current = await this.prisma.brandOwnerStorefrontDomain.findFirst({
+            where: {
+                id: domainId,
+                brandOwnerId: brandOwner.id,
+            },
+            select: {
+                id: true,
+                brandOwnerId: true,
+                hostName: true,
+                isPrimary: true,
+                isActive: true,
+                isVerified: true,
+            },
+        });
+
+        if (!current) {
+            throw new NotFoundException('Storefront domain not found');
+        }
+
+        const nextHostName =
+            dto.hostName !== undefined
+                ? this.normalizeStorefrontDomainHost(dto.hostName)
+                : current.hostName;
+
+        if (nextHostName !== current.hostName) {
+            const duplicate = await this.prisma.brandOwnerStorefrontDomain.findFirst({
+                where: {
+                    hostName: nextHostName,
+                    NOT: {
+                        id: domainId,
+                    },
+                },
+                select: {
+                    id: true,
+                },
+            });
+
+            if (duplicate) {
+                throw new BadRequestException('This storefront domain already exists');
+            }
+        }
+
+        const nextIsPrimary =
+            dto.isPrimary !== undefined ? dto.isPrimary : current.isPrimary;
+
+        const updated = await this.prisma.$transaction(async (tx) => {
+            // If this domain is becoming primary, unset any other primary domain first.
+            if (nextIsPrimary) {
+                await tx.brandOwnerStorefrontDomain.updateMany({
+                    where: {
+                        brandOwnerId: brandOwner.id,
+                        isPrimary: true,
+                        NOT: {
+                            id: domainId,
+                        },
+                    },
+                    data: {
+                        isPrimary: false,
+                    },
+                });
+            }
+
+            return tx.brandOwnerStorefrontDomain.update({
+                where: { id: domainId },
+                data: {
+                    ...(dto.hostName !== undefined
+                        ? { hostName: nextHostName }
+                        : {}),
+                    ...(dto.isPrimary !== undefined
+                        ? { isPrimary: dto.isPrimary }
+                        : {}),
+                    ...(dto.isActive !== undefined
+                        ? { isActive: dto.isActive }
+                        : {}),
+                    ...(dto.isVerified !== undefined
+                        ? { isVerified: dto.isVerified }
+                        : {}),
+                },
+                select: {
+                    id: true,
+                    brandOwnerId: true,
+                    hostName: true,
+                    isPrimary: true,
+                    isActive: true,
+                    isVerified: true,
+                    createdAt: true,
+                    updatedAt: true,
+                },
+            });
+        });
+
+        return updated;
+    }
+
+    /* =====================================================
+       DELETE OWN STOREFRONT DOMAIN
+       ===================================================== */
+    async deleteMyStorefrontDomain(
+        domainId: string,
+        user: JwtUser,
+    ) {
+        const brandOwner = await this.getOwnedBrandOwner(user);
+
+        const current = await this.prisma.brandOwnerStorefrontDomain.findFirst({
+            where: {
+                id: domainId,
+                brandOwnerId: brandOwner.id,
+            },
+            select: {
+                id: true,
+                isPrimary: true,
+            },
+        });
+
+        if (!current) {
+            throw new NotFoundException('Storefront domain not found');
+        }
+
+        const result = await this.prisma.$transaction(async (tx) => {
+            await tx.brandOwnerStorefrontDomain.delete({
+                where: {
+                    id: domainId,
+                },
+            });
+
+            // If deleted domain was primary, promote the oldest remaining active domain.
+            if (current.isPrimary) {
+                const fallbackPrimary = await tx.brandOwnerStorefrontDomain.findFirst({
+                    where: {
+                        brandOwnerId: brandOwner.id,
+                    },
+                    orderBy: [
+                        { isActive: 'desc' },
+                        { createdAt: 'asc' },
+                    ],
+                    select: {
+                        id: true,
+                    },
+                });
+
+                if (fallbackPrimary) {
+                    await tx.brandOwnerStorefrontDomain.update({
+                        where: {
+                            id: fallbackPrimary.id,
+                        },
+                        data: {
+                            isPrimary: true,
+                        },
+                    });
+                }
+            }
+
+            return {
+                message: 'Storefront domain deleted successfully',
+            };
+        });
+
+        return result;
     }
 
     /* =====================================================
@@ -766,6 +1194,48 @@ export class BrandOwnersService {
         }
 
         return brandOwner;
+    }
+
+    // Create default storefront records once so existing BOs can use settings safely.
+    private async ensureStorefrontDefaults(brandOwnerId: string) {
+        await this.prisma.$transaction([
+            this.prisma.brandOwnerStorefrontSetting.upsert({
+                where: { brandOwnerId },
+                update: {},
+                create: {
+                    brandOwnerId,
+                    isStorefrontEnabled: false,
+                    isGuestCheckoutEnabled: true,
+                    isCustomerRegistrationEnabled: true,
+                    currencyCode: 'INR',
+                },
+            }),
+            this.prisma.brandOwnerStorefrontTheme.upsert({
+                where: { brandOwnerId },
+                update: {},
+                create: {
+                    brandOwnerId,
+                    activeThemeCode: 'default',
+                    isThemeActive: true,
+                },
+            }),
+        ]);
+    }
+
+    // Read BO business name once for merged storefront response payload.
+    private async getBrandOwnerBusinessName(brandOwnerId: string) {
+        const owner = await this.prisma.brandOwner.findUnique({
+            where: { id: brandOwnerId },
+            select: { businessName: true },
+        });
+
+        return owner?.businessName ?? null;
+    }
+
+    // Convert empty or whitespace-only strings to null before DB write.
+    private toNullableTrimmed(value?: string | null) {
+        const trimmed = value?.trim();
+        return trimmed ? trimmed : null;
     }
 
     private async validateGeoRefs(
@@ -847,5 +1317,20 @@ export class BrandOwnersService {
                 );
             }
         }
+    }
+
+    // Normalize domain host before save so all comparisons stay consistent.
+    private normalizeStorefrontDomainHost(host: string) {
+        const normalized = host
+            .trim()
+            .toLowerCase()
+            .replace(/^https?:\/\//, '')
+            .split('/')[0];
+
+        if (!normalized) {
+            throw new BadRequestException('hostName is required');
+        }
+
+        return normalized;
     }
 }

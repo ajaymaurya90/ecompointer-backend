@@ -354,6 +354,7 @@ model BrandOwner {
 
   storefrontSetting BrandOwnerStorefrontSetting?
   storefrontTheme   BrandOwnerStorefrontTheme?
+  storefrontDomains BrandOwnerStorefrontDomain[]
   customerAuths     CustomerAuth[]
 
   countryId  String?
@@ -1157,36 +1158,41 @@ model Media {
 // STOREFRONT DOMAIN
 //////////////////////////////
 
-//////////////////////////////
-// STOREFRONT DOMAIN
-//////////////////////////////
-
 model BrandOwnerStorefrontSetting {
   id           String     @id @default(uuid())
   brandOwnerId String     @unique
   brandOwner   BrandOwner @relation(fields: [brandOwnerId], references: [id], onDelete: Cascade)
 
-  storefrontName String?
-  logoUrl        String?
-  faviconUrl     String?
-  supportEmail   String?
-  supportPhone   String?
+  // Public storefront identity
+  storefrontName   String?
+  tagline          String?
+  shortDescription String?
+  aboutDescription String?
 
-  isStorefrontEnabled           Boolean @default(true)
+  // Public storefront assets
+  logoUrl    String?
+  faviconUrl String?
+
+  // Public contact details
+  supportEmail String?
+  supportPhone String?
+
+  // Storefront behavior
+  isStorefrontEnabled           Boolean @default(false)
   isGuestCheckoutEnabled        Boolean @default(true)
   isCustomerRegistrationEnabled Boolean @default(true)
 
+  // Basic visual + business defaults
   primaryColor   String?
   secondaryColor String?
   currencyCode   String  @default("INR")
 
+  // Storefront-level SEO defaults
   seoTitle       String?
   seoDescription String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  @@index([brandOwnerId])
 }
 
 model BrandOwnerStorefrontTheme {
@@ -1196,12 +1202,31 @@ model BrandOwnerStorefrontTheme {
 
   activeThemeCode String  @default("default")
   isThemeActive   Boolean @default(true)
+
+  // Flexible JSON for theme-level configuration like spacing,
+  // typography, hero style, card radius, layout toggles, etc.
   themeConfigJson Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
 
+model BrandOwnerStorefrontDomain {
+  id           String     @id @default(uuid())
+  brandOwnerId String
+  brandOwner   BrandOwner @relation(fields: [brandOwnerId], references: [id], onDelete: Cascade)
+
+  hostName   String  @unique
+  isPrimary  Boolean @default(false)
+  isActive   Boolean @default(true)
+  isVerified Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([brandOwnerId, isPrimary])
   @@index([brandOwnerId])
+  @@index([isActive])
 }
 
 model CustomerAuth {
@@ -1218,6 +1243,9 @@ model CustomerAuth {
 
   refreshToken String?
   tokenVersion Int     @default(0)
+
+  lastLoginAt       DateTime?
+  passwordUpdatedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -1,7 +1,16 @@
-import { Controller, Get, Param, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { StorefrontBootstrapService } from '../services/storefront-bootstrap.service';
 
+/**
+ * ---------------------------------------------------------
+ * STOREFRONT BOOTSTRAP CONTROLLER
+ * ---------------------------------------------------------
+ * Purpose:
+ * Public storefront bootstrap endpoint that resolves the
+ * correct Brand Owner from the incoming host.
+ * ---------------------------------------------------------
+ */
 @ApiTags('Storefront Bootstrap')
 @Controller('storefront/bootstrap')
 export class StorefrontBootstrapController {
@@ -10,14 +19,12 @@ export class StorefrontBootstrapController {
     ) { }
 
     /* =====================================================
-       GET STOREFRONT BOOTSTRAP BY BRAND OWNER
+       RESOLVE STOREFRONT BOOTSTRAP BY HOST
        ===================================================== */
-    @Get(':brandOwnerId')
-    getBootstrap(
-        @Param('brandOwnerId', new ParseUUIDPipe()) brandOwnerId: string,
+    @Get('resolve/by-host')
+    getBootstrapByHost(
+        @Query('host') host?: string,
     ) {
-        return this.storefrontBootstrapService.getBootstrapByBrandOwnerId(
-            brandOwnerId,
-        );
+        return this.storefrontBootstrapService.getBootstrapByHost(host);
     }
 }

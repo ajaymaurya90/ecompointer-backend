@@ -1,10 +1,12 @@
 import {
     Body,
     Controller,
+    Delete,
     Get,
     Param,
     ParseUUIDPipe,
     Patch,
+    Post,
     UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -22,6 +24,9 @@ import { UpdateBrandOwnerLanguageDto } from '../dto/update-brand-owner-language.
 import { UpdateServiceAreaStateDto } from '../dto/update-service-area-state.dto';
 import { UpdateServiceAreaDistrictDto } from '../dto/update-service-area-district.dto';
 import { UpdateBrandOwnerShopOrderRulesDto } from '../dto/update-brand-owner-shop-order-rules.dto';
+import { UpdateBrandOwnerStorefrontSettingsDto } from '../dto/update-brand-owner-storefront-settings.dto';
+import { CreateBrandOwnerStorefrontDomainDto } from '../dto/create-brand-owner-storefront-domain.dto';
+import { UpdateBrandOwnerStorefrontDomainDto } from '../dto/update-brand-owner-storefront-domain.dto';
 
 @ApiTags('Brand Owners')
 @ApiBearerAuth()
@@ -30,18 +35,12 @@ import { UpdateBrandOwnerShopOrderRulesDto } from '../dto/update-brand-owner-sho
 export class BrandOwnersController {
     constructor(private readonly service: BrandOwnersService) { }
 
-    /* =====================================================
-       GET OWN LOCATION SETTINGS
-       ===================================================== */
     @Roles(Role.BRAND_OWNER)
     @Get('me/location')
     getMyLocation(@CurrentUser() user: JwtUser) {
         return this.service.getMyLocation(user);
     }
 
-    /* =====================================================
-       UPDATE OWN LOCATION SETTINGS
-       ===================================================== */
     @Roles(Role.BRAND_OWNER)
     @Patch('me/location')
     updateMyLocation(
@@ -51,18 +50,12 @@ export class BrandOwnersController {
         return this.service.updateMyLocation(dto, user);
     }
 
-    /* =====================================================
-       GET OWN LANGUAGE SETTINGS
-       ===================================================== */
     @Roles(Role.BRAND_OWNER)
     @Get('me/language')
     getMyLanguage(@CurrentUser() user: JwtUser) {
         return this.service.getMyLanguage(user);
     }
 
-    /* =====================================================
-       UPDATE OWN LANGUAGE SETTINGS
-       ===================================================== */
     @Roles(Role.BRAND_OWNER)
     @Patch('me/language')
     updateMyLanguage(
@@ -72,18 +65,12 @@ export class BrandOwnersController {
         return this.service.updateMyLanguage(dto, user);
     }
 
-    /* =====================================================
-       GET OWN SERVICE AREA SUMMARY
-       ===================================================== */
     @Roles(Role.BRAND_OWNER)
     @Get('me/service-area')
     getMyServiceArea(@CurrentUser() user: JwtUser) {
         return this.service.getMyServiceArea(user);
     }
 
-    /* =====================================================
-       GET OWN SERVICE AREA DISTRICTS FOR A STATE
-       ===================================================== */
     @Roles(Role.BRAND_OWNER)
     @Get('me/service-area/states/:stateId/districts')
     getMyServiceAreaDistricts(
@@ -93,9 +80,6 @@ export class BrandOwnersController {
         return this.service.getMyServiceAreaDistricts(stateId, user);
     }
 
-    /* =====================================================
-       UPDATE OWN SERVICE AREA STATE
-       ===================================================== */
     @Roles(Role.BRAND_OWNER)
     @Patch('me/service-area/states/:stateId')
     updateMyServiceAreaState(
@@ -106,9 +90,6 @@ export class BrandOwnersController {
         return this.service.updateMyServiceAreaState(stateId, dto, user);
     }
 
-    /* =====================================================
-       UPDATE OWN SERVICE AREA DISTRICT
-       ===================================================== */
     @Roles(Role.BRAND_OWNER)
     @Patch('me/service-area/districts/:districtId')
     updateMyServiceAreaDistrict(
@@ -119,18 +100,12 @@ export class BrandOwnersController {
         return this.service.updateMyServiceAreaDistrict(districtId, dto, user);
     }
 
-    /* =====================================================
-   GET OWN SHOP ORDER RULES
-   ===================================================== */
     @Roles(Role.BRAND_OWNER)
     @Get('me/shop-order-rules')
     getMyShopOrderRules(@CurrentUser() user: JwtUser) {
         return this.service.getMyShopOrderRules(user);
     }
 
-    /* =====================================================
-       UPDATE OWN SHOP ORDER RULES
-       ===================================================== */
     @Roles(Role.BRAND_OWNER)
     @Patch('me/shop-order-rules')
     updateMyShopOrderRules(
@@ -138,5 +113,66 @@ export class BrandOwnersController {
         @CurrentUser() user: JwtUser,
     ) {
         return this.service.updateMyShopOrderRules(dto, user);
+    }
+
+    @Roles(Role.BRAND_OWNER)
+    @Get('me/storefront-settings')
+    getMyStorefrontSettings(@CurrentUser() user: JwtUser) {
+        return this.service.getMyStorefrontSettings(user);
+    }
+
+    @Roles(Role.BRAND_OWNER)
+    @Patch('me/storefront-settings')
+    updateMyStorefrontSettings(
+        @Body() dto: UpdateBrandOwnerStorefrontSettingsDto,
+        @CurrentUser() user: JwtUser,
+    ) {
+        return this.service.updateMyStorefrontSettings(dto, user);
+    }
+
+    /* =====================================================
+       LIST OWN STOREFRONT DOMAINS
+       ===================================================== */
+    @Roles(Role.BRAND_OWNER)
+    @Get('me/storefront-domains')
+    getMyStorefrontDomains(@CurrentUser() user: JwtUser) {
+        return this.service.getMyStorefrontDomains(user);
+    }
+
+    /* =====================================================
+       CREATE OWN STOREFRONT DOMAIN
+       ===================================================== */
+    @Roles(Role.BRAND_OWNER)
+    @Post('me/storefront-domains')
+    createMyStorefrontDomain(
+        @Body() dto: CreateBrandOwnerStorefrontDomainDto,
+        @CurrentUser() user: JwtUser,
+    ) {
+        return this.service.createMyStorefrontDomain(dto, user);
+    }
+
+    /* =====================================================
+       UPDATE OWN STOREFRONT DOMAIN
+       ===================================================== */
+    @Roles(Role.BRAND_OWNER)
+    @Patch('me/storefront-domains/:domainId')
+    updateMyStorefrontDomain(
+        @Param('domainId', new ParseUUIDPipe()) domainId: string,
+        @Body() dto: UpdateBrandOwnerStorefrontDomainDto,
+        @CurrentUser() user: JwtUser,
+    ) {
+        return this.service.updateMyStorefrontDomain(domainId, dto, user);
+    }
+
+    /* =====================================================
+       DELETE OWN STOREFRONT DOMAIN
+       ===================================================== */
+    @Roles(Role.BRAND_OWNER)
+    @Delete('me/storefront-domains/:domainId')
+    deleteMyStorefrontDomain(
+        @Param('domainId', new ParseUUIDPipe()) domainId: string,
+        @CurrentUser() user: JwtUser,
+    ) {
+        return this.service.deleteMyStorefrontDomain(domainId, user);
     }
 }
