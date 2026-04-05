@@ -4,6 +4,7 @@ import {
     NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { StorefrontBootstrapCacheService } from './storefront-bootstrap-cache.service';
 
 /**
  * ---------------------------------------------------------
@@ -13,11 +14,19 @@ import { PrismaService } from 'src/prisma/prisma.service';
  * Resolves storefront from BrandOwnerStorefrontDomain and
  * returns public bootstrap payload using storefront setting
  * and theme models.
+ *
+ * Optimizations:
+ * - exact normalized host lookup
+ * - small in-memory host cache
+ * - reusable invalidation support
  * ---------------------------------------------------------
  */
 @Injectable()
 export class StorefrontBootstrapService {
-    constructor(private readonly prisma: PrismaService) { }
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly cache: StorefrontBootstrapCacheService,
+    ) { }
 
     /* =====================================================
        GET STOREFRONT BOOTSTRAP BY HOST
@@ -27,6 +36,12 @@ export class StorefrontBootstrapService {
 
         if (!normalizedHost) {
             throw new BadRequestException('host is required');
+        }
+
+        // CHANGED: return cached bootstrap immediately when present for faster repeated requests.
+        const cached = this.cache.get<any>(normalizedHost);
+        if (cached) {
+            return cached;
         }
 
         const domain = await this.prisma.brandOwnerStorefrontDomain.findFirst({
@@ -47,6 +62,7 @@ export class StorefrontBootstrapService {
             throw new NotFoundException('Storefront domain not found');
         }
 
+        // CHANGED: ensure default storefront rows exist before reading merged bootstrap payload.
         await this.ensureStorefrontDefaults(domain.brandOwnerId);
 
         const brandOwner = await this.prisma.brandOwner.findUnique({
@@ -101,7 +117,7 @@ export class StorefrontBootstrapService {
             brandOwner.storefrontSetting?.storefrontName ||
             brandOwner.businessName;
 
-        return {
+        const payload = {
             domain: {
                 id: domain.id,
                 hostName: domain.hostName,
@@ -149,12 +165,38 @@ export class StorefrontBootstrapService {
                     brandOwner.storefrontTheme?.themeConfigJson || null,
             },
         };
+
+        // CHANGED: cache the final payload by exact normalized host for faster next request.
+        this.cache.set(normalizedHost, payload);
+
+        return payload;
+    }
+
+    /* =====================================================
+       CACHE INVALIDATION HELPERS
+       ===================================================== */
+
+    // CHANGED: allow other services to invalidate one exact host cache entry.
+    invalidateHostCache(host: string) {
+        const normalizedHost = this.normalizeHost(host);
+
+        if (!normalizedHost) {
+            return;
+        }
+
+        this.cache.delete(normalizedHost);
+    }
+
+    // CHANGED: allow BO-level invalidation after settings/theme/domain updates.
+    invalidateBrandOwnerCache(brandOwnerId: string) {
+        this.cache.deleteByBrandOwnerId(brandOwnerId);
     }
 
     /* =====================================================
        HELPERS
        ===================================================== */
 
+    // CHANGED: keep host normalization centralized and consistent with domain lookup rules.
     private normalizeHost(host?: string | null) {
         if (!host) {
             return '';
@@ -167,6 +209,7 @@ export class StorefrontBootstrapService {
             .split('/')[0];
     }
 
+    // CHANGED: create default storefront settings/theme rows only once for existing BOs.
     private async ensureStorefrontDefaults(brandOwnerId: string) {
         const brandOwnerExists = await this.prisma.brandOwner.findUnique({
             where: { id: brandOwnerId },

@@ -8,6 +8,7 @@ import { Role } from '@prisma/client';
 
 import { PrismaService } from 'src/prisma/prisma.service';
 import type { JwtUser } from 'src/auth/types/jwt-user.type';
+import { StorefrontBootstrapCacheService } from 'src/modules/storefront/bootstrap/services/storefront-bootstrap-cache.service'; // CHANGED: added bootstrap cache service import
 
 import { UpdateBrandOwnerLocationDto } from '../dto/update-brand-owner-location.dto';
 import { UpdateBrandOwnerLanguageDto } from '../dto/update-brand-owner-language.dto';
@@ -20,7 +21,10 @@ import { UpdateBrandOwnerStorefrontDomainDto } from '../dto/update-brand-owner-s
 
 @Injectable()
 export class BrandOwnersService {
-    constructor(private readonly prisma: PrismaService) { }
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly storefrontBootstrapCache: StorefrontBootstrapCacheService, // CHANGED: inject cache service
+    ) { }
 
     /* =====================================================
        GET OWN BRAND OWNER LOCATION
@@ -871,6 +875,9 @@ export class BrandOwnersService {
                 return [setting, theme, owner?.businessName ?? null] as const;
             });
 
+        // CHANGED: invalidate all cached storefront bootstrap entries for this BO after settings/theme update.
+        this.storefrontBootstrapCache.deleteByBrandOwnerId(brandOwner.id);
+
         return {
             id: brandOwner.id,
             businessName: businessName,
@@ -891,8 +898,8 @@ export class BrandOwnersService {
     }
 
     /* =====================================================
-   LIST OWN STOREFRONT DOMAINS
-   ===================================================== */
+       LIST OWN STOREFRONT DOMAINS
+       ===================================================== */
     async getMyStorefrontDomains(user: JwtUser) {
         const brandOwner = await this.getOwnedBrandOwner(user);
 
@@ -980,6 +987,10 @@ export class BrandOwnersService {
                 },
             });
         });
+
+        // CHANGED: clear cached storefront bootstrap for this BO and exact host after domain creation.
+        this.storefrontBootstrapCache.deleteByBrandOwnerId(brandOwner.id);
+        this.storefrontBootstrapCache.delete(created.hostName);
 
         return created;
     }
@@ -1085,6 +1096,11 @@ export class BrandOwnersService {
             });
         });
 
+        // CHANGED: clear both old-host and new-host cache plus BO-wide cache after domain update.
+        this.storefrontBootstrapCache.deleteByBrandOwnerId(brandOwner.id);
+        this.storefrontBootstrapCache.delete(current.hostName);
+        this.storefrontBootstrapCache.delete(updated.hostName);
+
         return updated;
     }
 
@@ -1105,6 +1121,7 @@ export class BrandOwnersService {
             select: {
                 id: true,
                 isPrimary: true,
+                hostName: true, // CHANGED: include hostName so exact cache entry can be removed after delete
             },
         });
 
@@ -1150,6 +1167,10 @@ export class BrandOwnersService {
                 message: 'Storefront domain deleted successfully',
             };
         });
+
+        // CHANGED: clear BO-wide cache and removed-host cache after delete.
+        this.storefrontBootstrapCache.deleteByBrandOwnerId(brandOwner.id);
+        this.storefrontBootstrapCache.delete(current.hostName);
 
         return result;
     }
