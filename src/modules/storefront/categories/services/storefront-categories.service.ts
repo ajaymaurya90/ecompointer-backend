@@ -5,6 +5,20 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 
+/**
+ * ---------------------------------------------------------
+ * STOREFRONT CATEGORIES SERVICE
+ * ---------------------------------------------------------
+ * Purpose:
+ * Provides public storefront-safe category data for a
+ * Brand Owner storefront.
+ *
+ * Notes:
+ * - Only active categories are exposed
+ * - Only categories useful for storefront navigation are returned
+ * - Root categories include active child categories
+ * ---------------------------------------------------------
+ */
 @Injectable()
 export class StorefrontCategoriesService {
     constructor(private readonly prisma: PrismaService) { }
@@ -13,10 +27,10 @@ export class StorefrontCategoriesService {
        GET STOREFRONT CATEGORY LIST
        ===================================================== */
     async findAll(brandOwnerId: string) {
-        // Ensure the brand owner exists and storefront can be queried.
+        // Ensure the Brand Owner exists and storefront is enabled before exposing categories.
         await this.assertBrandOwnerStorefrontAvailable(brandOwnerId);
 
-        // Load all active categories for the brand owner with child categories.
+        // Load all active categories with active children and active product counts.
         const categories = await this.prisma.productCategory.findMany({
             where: {
                 brandOwnerId,
@@ -60,19 +74,22 @@ export class StorefrontCategoriesService {
             },
         });
 
-        // Keep only categories that have active products or useful child categories.
+        // Keep only categories meaningful for storefront navigation.
         const filteredCategories = categories.filter((category) => {
             const hasOwnProducts = category._count.products > 0;
-            const hasActiveChildren = category.children.length > 0;
-            return hasOwnProducts || hasActiveChildren;
+            const hasUsefulChildren = category.children.some(
+                (child) => child._count.products > 0,
+            );
+
+            return hasOwnProducts || hasUsefulChildren;
         });
 
-        // Split categories into root-level navigation items.
+        // Keep only root categories for storefront navigation.
         const rootCategories = filteredCategories.filter(
             (category) => category.parentId === null,
         );
 
-        // Map categories into storefront-friendly navigation structure.
+        // Shape categories into a lightweight storefront response.
         const data = rootCategories.map((category) => ({
             id: category.id,
             name: category.name,
@@ -103,7 +120,7 @@ export class StorefrontCategoriesService {
         brandOwnerId: string,
         categoryId: string,
     ) {
-        // Ensure the brand owner exists and storefront can be queried.
+        // Ensure the Brand Owner exists and storefront is enabled before exposing category detail.
         await this.assertBrandOwnerStorefrontAvailable(brandOwnerId);
 
         // Load one active category with parent, children, and active product count.
@@ -157,7 +174,7 @@ export class StorefrontCategoriesService {
             throw new NotFoundException('Storefront category not found');
         }
 
-        // Build storefront-friendly detail payload for category pages.
+        // Build storefront-friendly detail payload for category pages or filters.
         const data = {
             id: category.id,
             name: category.name,
@@ -165,13 +182,15 @@ export class StorefrontCategoriesService {
             position: category.position,
             productCount: category._count.products,
             parent: category.parent,
-            children: category.children.map((child) => ({
-                id: child.id,
-                name: child.name,
-                description: child.description,
-                position: child.position,
-                productCount: child._count.products,
-            })),
+            children: category.children
+                .filter((child) => child._count.products > 0)
+                .map((child) => ({
+                    id: child.id,
+                    name: child.name,
+                    description: child.description,
+                    position: child.position,
+                    productCount: child._count.products,
+                })),
         };
 
         return {

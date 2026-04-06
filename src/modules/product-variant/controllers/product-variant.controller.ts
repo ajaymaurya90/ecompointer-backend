@@ -31,9 +31,9 @@ import {
     Get,
     UseGuards,
 } from '@nestjs/common';
-import { ProductVariantService } from './product-variant.service';
-import { CreateProductVariantDto } from './dto/create-product-variant.dto';
-import { UpdateProductVariantDto } from './dto/update-product-variant.dto';
+import { ProductVariantService } from '../services/product-variant.service';
+import { CreateProductVariantDto } from '../dto/create-product-variant.dto';
+import { UpdateProductVariantDto } from '../dto/update-product-variant.dto';
 import { ApiTags, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { JwtGuard } from 'src/auth/jwt.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
@@ -41,7 +41,7 @@ import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Role } from '@prisma/client';
 import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
 import type { JwtUser } from 'src/auth/types/jwt-user.type';
-import { GenerateProductVariantsDto } from './dto/generate-product-variants.dto';
+import { GenerateProductVariantsDto } from '../dto/generate-product-variants.dto';
 
 @UseGuards(JwtGuard, RolesGuard)
 @Controller('products/:productId/variants')

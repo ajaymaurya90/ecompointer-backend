@@ -4,18 +4,15 @@
  * ---------------------------------------------------------
  * Primary Responsibilities:
  *
- * 1. Create products under a specific brand & category
- * 2. Validate brand and category integrity
+ * 1. Create products under a specific brand & primary category
+ * 2. Maintain multi-category assignments through join table
  * 3. Enforce unique productCode per brand
- * 4. Fetch single product with:
- *      - Brand
- *      - Category
- *      - Product-level media
- *      - Variants + variant-level media
- * 5. Paginated product listing with optional brand filter
+ * 4. Fetch single product with relations + category assignments
+ * 5. Paginated product listing with optional filters
  * 6. Lightweight variant search for order creation
- * 7. Update product basic details
- * 8. Soft delete product (cascade deactivate variants)
+ * 7. Update product basic details + category assignment sync
+ * 8. Soft delete product
+ * 9. Suggest next product code for create flow
  * ---------------------------------------------------------
  */
 import {
@@ -26,13 +23,12 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { Prisma, Role } from '@prisma/client';
-import { CreateProductDto } from './dto/create-product.dto';
-import { UpdateProductDto } from './dto/update-product.dto';
+import { CreateProductDto } from '../dto/create-product.dto';
+import { UpdateProductDto } from '../dto/update-product.dto';
 import type { JwtUser } from 'src/auth/types/jwt-user.type';
 
 @Injectable()
 export class ProductService {
-
     constructor(private prisma: PrismaService) { }
 
     /* =====================================================
@@ -49,29 +45,52 @@ export class ProductService {
             throw new ForbiddenException('Not your brand');
         }
 
-        const category = await this.prisma.productCategory.findFirst({
-            where: {
-                id: dto.categoryId,
-                brandOwnerId: brandOwner.id,
-                isActive: true,
-            },
-        });
+        // Build final category set. Primary category must always be included.
+        const finalCategoryIds = this.buildFinalCategoryIds(
+            dto.categoryId,
+            dto.categoryIds,
+        );
 
-        if (!category) {
-            throw new BadRequestException('Invalid category for this BrandOwner');
-        }
+        // Validate all selected categories belong to same BrandOwner.
+        await this.validateCategoryIdsForBrandOwner(
+            finalCategoryIds,
+            brandOwner.id,
+        );
 
         try {
-            return await this.prisma.product.create({
-                data: {
-                    name: dto.name,
-                    productCode: dto.productCode,
-                    brandId: dto.brandId,
-                    categoryId: dto.categoryId,
-                    description: dto.description,
-                    brandOwnerId: brandOwner.id,
-                },
+            const createdProduct = await this.prisma.$transaction(async (tx) => {
+                // Create product with primary/default category.
+                const product = await tx.product.create({
+                    data: {
+                        name: dto.name,
+                        productCode: dto.productCode,
+                        brandId: dto.brandId,
+                        categoryId: dto.categoryId,
+                        description: dto.description,
+                        brandOwnerId: brandOwner.id,
+                    },
+                });
+
+                // Create all category assignment rows including primary category.
+                await tx.productCategoryAssignment.createMany({
+                    data: finalCategoryIds.map((categoryId) => ({
+                        productId: product.id,
+                        categoryId,
+                    })),
+                    skipDuplicates: true,
+                });
+
+                return tx.product.findUnique({
+                    where: { id: product.id },
+                    include: this.getProductDetailInclude(),
+                });
             });
+
+            if (!createdProduct) {
+                throw new NotFoundException('Product not found after creation');
+            }
+
+            return this.mapProductResponse(createdProduct);
         } catch (error) {
             if (
                 error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -81,16 +100,63 @@ export class ProductService {
                     `Product code "${dto.productCode}" already exists for this brand`,
                 );
             }
+
             throw error;
         }
     }
 
     /* =====================================================
-   LIGHTWEIGHT ORDER SEARCH (OPTIMIZED)
-   ===================================================== */
-    async orderSearch(user: JwtUser, search?: string) {
+       SUGGEST NEXT PRODUCT CODE
+       ===================================================== */
+    async suggestNextProductCode(user: JwtUser) {
+        await this.getBrandOwnerProfile(user);
 
-        // Prevent heavy DB calls for empty or small search
+        // Build prefix as PRD + YY + MM.
+        const now = new Date();
+        const year = String(now.getFullYear()).slice(-2);
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const prefix = `PRD${year}${month}`;
+
+        // Find latest product code for current prefix.
+        const latestProduct = await this.prisma.product.findFirst({
+            where: {
+                productCode: {
+                    startsWith: prefix,
+                },
+            },
+            orderBy: {
+                productCode: 'desc',
+            },
+            select: {
+                productCode: true,
+            },
+        });
+
+        let nextSequence = 1;
+
+        if (latestProduct?.productCode) {
+            const match = latestProduct.productCode.match(
+                new RegExp(`^${prefix}(\\d{5})$`),
+            );
+
+            if (match) {
+                nextSequence = Number(match[1]) + 1;
+            }
+        }
+
+        const suggestedCode = `${prefix}${String(nextSequence).padStart(5, '0')}`;
+
+        return {
+            code: suggestedCode,
+            prefix,
+            sequence: nextSequence,
+        };
+    }
+
+    /* =====================================================
+       LIGHTWEIGHT ORDER SEARCH
+       ===================================================== */
+    async orderSearch(user: JwtUser, search?: string) {
         if (!search || search.trim().length < 2) {
             return {
                 message: 'Type at least 2 characters to search',
@@ -99,7 +165,6 @@ export class ProductService {
         }
 
         const searchValue = search.trim();
-
         const allowedBrandOwnerIds = await this.getAccessibleBrandOwnerIds(user);
 
         const variants = await this.prisma.productVariant.findMany({
@@ -108,7 +173,9 @@ export class ProductService {
                 product: {
                     isActive: true,
                     brandOwnerId: {
-                        in: allowedBrandOwnerIds.length ? allowedBrandOwnerIds : ['__none__'],
+                        in: allowedBrandOwnerIds.length
+                            ? allowedBrandOwnerIds
+                            : ['__none__'],
                     },
                 },
                 OR: [
@@ -136,14 +203,8 @@ export class ProductService {
                     },
                 ],
             },
-
-            take: 10, // 🔥 LIMIT RESULTS
-
-            orderBy: [
-                { sku: 'asc' },
-                { product: { name: 'asc' } },
-            ],
-
+            take: 10,
+            orderBy: [{ sku: 'asc' }, { product: { name: 'asc' } }],
             include: {
                 product: {
                     select: {
@@ -177,7 +238,9 @@ export class ProductService {
             brandOwnerId: variant.product.brandOwnerId,
             brand: variant.product.brand,
             sku: variant.sku,
-            variantLabel: [variant.size, variant.color].filter(Boolean).join(' ').trim() || null,
+            variantLabel:
+                [variant.size, variant.color].filter(Boolean).join(' ').trim() ||
+                null,
             size: variant.size,
             color: variant.color,
             stock: variant.stock,
@@ -186,10 +249,13 @@ export class ProductService {
             wholesaleGross: variant.wholesaleGross,
             isActive: variant.isActive,
             shopOrderRules: {
-                minLineQty: variant.product.brandOwner?.minShopOrderLineQty ?? 3,
-                minCartQty: variant.product.brandOwner?.minShopOrderCartQty ?? 10,
+                minLineQty:
+                    variant.product.brandOwner?.minShopOrderLineQty ?? 3,
+                minCartQty:
+                    variant.product.brandOwner?.minShopOrderCartQty ?? 10,
                 allowBelowMinLineQtyAfterCartMin:
-                    variant.product.brandOwner?.allowBelowMinLineQtyAfterCartMin ?? true,
+                    variant.product.brandOwner
+                        ?.allowBelowMinLineQtyAfterCartMin ?? true,
             },
         }));
 
@@ -205,17 +271,7 @@ export class ProductService {
     async findOne(productId: string, user: JwtUser) {
         const product = await this.prisma.product.findUnique({
             where: { id: productId },
-            include: {
-                brand: true,
-                category: true,
-                variants: {
-                    where: { isActive: true },
-                    include: { media: true },
-                },
-                media: {
-                    where: { isActive: true, variantId: null },
-                },
-            },
+            include: this.getProductDetailInclude(),
         });
 
         if (!product || !product.isActive) {
@@ -224,7 +280,7 @@ export class ProductService {
 
         await this.validateProductAccess(product.brand.brandOwnerId, user, false);
 
-        return product;
+        return this.mapProductResponse(product);
     }
 
     /* =====================================================
@@ -232,12 +288,13 @@ export class ProductService {
        ===================================================== */
     async findAll(user: JwtUser, page: number, limit: number, filters: any) {
         const skip = (page - 1) * limit;
-
         const where: Prisma.ProductWhereInput = { isActive: true };
         const accessibleBrandOwnerIds = await this.getAccessibleBrandOwnerIds(user);
 
         where.brandOwnerId = {
-            in: accessibleBrandOwnerIds.length ? accessibleBrandOwnerIds : ['__none__'],
+            in: accessibleBrandOwnerIds.length
+                ? accessibleBrandOwnerIds
+                : ['__none__'],
         };
 
         if (filters.search) {
@@ -247,8 +304,13 @@ export class ProductService {
             ];
         }
 
+        // Filter by assigned category, not only primary category.
         if (filters.categoryId) {
-            where.categoryId = filters.categoryId;
+            where.categoryAssignments = {
+                some: {
+                    categoryId: filters.categoryId,
+                },
+            };
         }
 
         const allowedSortFields = ['createdAt', 'name', 'productCode'];
@@ -267,6 +329,20 @@ export class ProductService {
                 include: {
                     brand: true,
                     category: true,
+                    categoryAssignments: {
+                        include: {
+                            category: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    parentId: true,
+                                },
+                            },
+                        },
+                        orderBy: {
+                            createdAt: 'asc',
+                        },
+                    },
                     variants: {
                         where: { isActive: true },
                         select: { stock: true },
@@ -276,10 +352,9 @@ export class ProductService {
             this.prisma.product.count({ where }),
         ]);
 
-        const data = products.map((p) => ({
-            ...p,
-            totalStock: p.variants.reduce((sum, v) => sum + v.stock, 0),
-        }));
+        const data = products.map((product) =>
+            this.mapProductListResponse(product),
+        );
 
         return {
             data,
@@ -297,6 +372,18 @@ export class ProductService {
     async update(productId: string, dto: UpdateProductDto, user: JwtUser) {
         const product = await this.prisma.product.findUnique({
             where: { id: productId },
+            select: {
+                id: true,
+                brandId: true,
+                brandOwnerId: true,
+                categoryId: true,
+                isActive: true,
+                categoryAssignments: {
+                    select: {
+                        categoryId: true,
+                    },
+                },
+            },
         });
 
         if (!product || !product.isActive) {
@@ -305,26 +392,24 @@ export class ProductService {
 
         await this.validateProductAccess(product.brandOwnerId, user, true);
 
-        if (dto.categoryId) {
-            const category = await this.prisma.productCategory.findFirst({
-                where: {
-                    id: dto.categoryId,
-                    brandOwnerId: product.brandOwnerId,
-                    isActive: true,
-                },
-            });
+        const nextBrandId = dto.brandId ?? product.brandId;
+        const nextPrimaryCategoryId = dto.categoryId ?? product.categoryId;
 
-            if (!category) {
-                throw new BadRequestException(
-                    'Category must belong to same BrandOwner',
-                );
-            }
-        }
+        // Resolve final category assignments. If categoryIds not sent,
+        // keep existing assignments and ensure primary category is included.
+        const existingCategoryIds = product.categoryAssignments.map(
+            (item) => item.categoryId,
+        );
+
+        const nextCategoryIds = this.buildFinalCategoryIds(
+            nextPrimaryCategoryId,
+            dto.categoryIds ?? existingCategoryIds,
+        );
 
         if (dto.brandId) {
             const brand = await this.prisma.productBrand.findFirst({
                 where: {
-                    id: dto.brandId,
+                    id: nextBrandId,
                     brandOwnerId: product.brandOwnerId,
                 },
             });
@@ -336,11 +421,56 @@ export class ProductService {
             }
         }
 
+        // Validate all chosen categories belong to same BrandOwner.
+        await this.validateCategoryIdsForBrandOwner(
+            nextCategoryIds,
+            product.brandOwnerId,
+        );
+
         try {
-            return await this.prisma.product.update({
-                where: { id: productId },
-                data: dto,
+            const updatedProduct = await this.prisma.$transaction(async (tx) => {
+                // Update product base data including primary/default category.
+                await tx.product.update({
+                    where: { id: productId },
+                    data: {
+                        ...(dto.name !== undefined ? { name: dto.name } : {}),
+                        ...(dto.productCode !== undefined
+                            ? { productCode: dto.productCode }
+                            : {}),
+                        ...(dto.description !== undefined
+                            ? { description: dto.description }
+                            : {}),
+                        ...(dto.brandId !== undefined ? { brandId: dto.brandId } : {}),
+                        categoryId: nextPrimaryCategoryId,
+                    },
+                });
+
+                // Replace assignment set with final submitted set.
+                await tx.productCategoryAssignment.deleteMany({
+                    where: {
+                        productId,
+                    },
+                });
+
+                await tx.productCategoryAssignment.createMany({
+                    data: nextCategoryIds.map((categoryId) => ({
+                        productId,
+                        categoryId,
+                    })),
+                    skipDuplicates: true,
+                });
+
+                return tx.product.findUnique({
+                    where: { id: productId },
+                    include: this.getProductDetailInclude(),
+                });
             });
+
+            if (!updatedProduct) {
+                throw new NotFoundException('Product not found after update');
+            }
+
+            return this.mapProductResponse(updatedProduct);
         } catch (error) {
             if (
                 error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -356,7 +486,7 @@ export class ProductService {
     }
 
     /* =====================================================
-       DELETE (Soft)
+       DELETE (SOFT)
        ===================================================== */
     async remove(productId: string, user: JwtUser) {
         const product = await this.prisma.product.findUnique({
@@ -385,8 +515,107 @@ export class ProductService {
     }
 
     /* =====================================================
+       RESPONSE MAPPERS
+       ===================================================== */
+
+    // Shared include for create/update/findOne detail-level product response.
+    private getProductDetailInclude(): Prisma.ProductInclude {
+        return {
+            brand: true,
+            category: true,
+            categoryAssignments: {
+                include: {
+                    category: {
+                        select: {
+                            id: true,
+                            name: true,
+                            parentId: true,
+                        },
+                    },
+                },
+                orderBy: {
+                    createdAt: 'asc',
+                },
+            },
+            variants: {
+                where: { isActive: true },
+                include: { media: true },
+            },
+            media: {
+                where: { isActive: true, variantId: null },
+            },
+        };
+    }
+
+    // Normalize product payload so frontend always gets categoryIds directly.
+    private mapProductResponse(product: any) {
+        return {
+            ...product,
+            categoryIds:
+                product.categoryAssignments?.map(
+                    (item: any) => item.categoryId,
+                ) ?? [],
+        };
+    }
+
+    // Lightweight mapper for list responses while still exposing categoryIds.
+    private mapProductListResponse(product: any) {
+        return {
+            ...product,
+            categoryIds:
+                product.categoryAssignments?.map(
+                    (item: any) => item.categoryId,
+                ) ?? [],
+            totalStock:
+                product.variants?.reduce(
+                    (sum: number, variant: { stock: number }) =>
+                        sum + variant.stock,
+                    0,
+                ) ?? 0,
+            variantCount: product.variants?.length ?? 0,
+        };
+    }
+
+    /* =====================================================
        HELPERS
        ===================================================== */
+
+    // Build final assignment set and force primary category to exist inside it.
+    private buildFinalCategoryIds(
+        primaryCategoryId: string,
+        categoryIds?: string[],
+    ) {
+        const finalIds = new Set<string>([primaryCategoryId]);
+
+        for (const categoryId of categoryIds ?? []) {
+            if (categoryId) {
+                finalIds.add(categoryId);
+            }
+        }
+
+        return [...finalIds];
+    }
+
+    // Validate that all category ids exist, are active, and belong to the same BO.
+    private async validateCategoryIdsForBrandOwner(
+        categoryIds: string[],
+        brandOwnerId: string,
+    ) {
+        const categories = await this.prisma.productCategory.findMany({
+            where: {
+                id: { in: categoryIds },
+                brandOwnerId,
+                isActive: true,
+            },
+            select: { id: true },
+        });
+
+        if (categories.length !== categoryIds.length) {
+            throw new BadRequestException(
+                'One or more selected categories are invalid for this BrandOwner',
+            );
+        }
+    }
 
     private async getBrandOwnerProfile(user: JwtUser) {
         const brandOwner = await this.prisma.brandOwner.findUnique({

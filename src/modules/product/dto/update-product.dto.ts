@@ -1,14 +1,18 @@
-import { IsOptional, IsString, IsUUID } from 'class-validator';
+import {
+    IsOptional,
+    IsString,
+    IsUUID,
+    IsArray,
+    ArrayNotEmpty,
+} from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 /**
  * ---------------------------------------------------------
  * UPDATE PRODUCT DTO
  * ---------------------------------------------------------
- * Used for partially updating a product.
- *
- * All fields are optional because this DTO
- * is used with PATCH requests.
+ * categoryId = primary/default category
+ * categoryIds = full assigned category list
  * ---------------------------------------------------------
  */
 export class UpdateProductDto {
@@ -37,7 +41,7 @@ export class UpdateProductDto {
     description?: string;
 
     @ApiPropertyOptional({
-        example: '660e8400-e29b-41d4-a716-446655440111',
+        example: '550e8400-e29b-41d4-a716-446655440000',
         description: 'New brand UUID',
     })
     @IsOptional()
@@ -46,9 +50,23 @@ export class UpdateProductDto {
 
     @ApiPropertyOptional({
         example: '660e8400-e29b-41d4-a716-446655440112',
-        description: 'New category UUID (if product is being moved)',
+        description: 'New primary/default category UUID',
     })
     @IsOptional()
     @IsUUID()
     categoryId?: string;
+
+    @ApiPropertyOptional({
+        example: [
+            '660e8400-e29b-41d4-a716-446655440112',
+            '660e8400-e29b-41d4-a716-446655440113',
+        ],
+        description: 'Full assigned category UUID list including primary category',
+        type: [String],
+    })
+    @IsOptional()
+    @IsArray()
+    @ArrayNotEmpty()
+    @IsUUID('4', { each: true })
+    categoryIds?: string[];
 }

@@ -442,6 +442,37 @@ model BrandOwnerShop {
 // PRODUCT DOMAIN
 //////////////////////////////
 
+model Product {
+  id          String @id @default(uuid())
+  name        String
+  productCode String
+
+  brandId String
+  brand   ProductBrand @relation(fields: [brandId], references: [id])
+
+  brandOwnerId String
+  brandOwner   BrandOwner @relation(fields: [brandOwnerId], references: [id])
+
+  categoryId          String
+  category            ProductCategory             @relation(fields: [categoryId], references: [id])
+  categoryAssignments ProductCategoryAssignment[]
+
+  description String?
+  isActive    Boolean @default(true)
+
+  variants     ProductVariant[]
+  media        Media[]
+  attributes   ProductAttribute[]
+  translations ProductTranslations[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([brandId, productCode])
+  @@index([brandOwnerId])
+  @@index([categoryId])
+}
+
 model ProductBrand {
   id          String      @id @default(uuid())
   name        String
@@ -472,9 +503,11 @@ model ProductCategory {
   parent   ProductCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
   children ProductCategory[] @relation("CategoryHierarchy")
 
-  products Product[]
-  position Int       @default(0)
-  isActive Boolean   @default(true)
+  products           Product[]
+  productAssignments ProductCategoryAssignment[]
+
+  position Int     @default(0)
+  isActive Boolean @default(true)
 
   translations ProductCategoryTranslations[]
 
@@ -487,32 +520,20 @@ model ProductCategory {
   @@index([parentId, position])
 }
 
-model Product {
-  id          String @id @default(uuid())
-  name        String
-  productCode String
-
-  brandId String
-  brand   ProductBrand @relation(fields: [brandId], references: [id])
-
-  brandOwnerId String
-  brandOwner   BrandOwner @relation(fields: [brandOwnerId], references: [id])
-
+model ProductCategoryAssignment {
+  id         String @id @default(uuid())
+  productId  String
   categoryId String
-  category   ProductCategory @relation(fields: [categoryId], references: [id])
 
-  description String?
-  isActive    Boolean @default(true)
-
-  variants     ProductVariant[]
-  media        Media[]
-  attributes   ProductAttribute[]
-  translations ProductTranslations[]
+  product  Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  category ProductCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([brandId, productCode])
+  @@unique([productId, categoryId])
+  @@index([productId])
+  @@index([categoryId])
 }
 
 model ProductVariant {

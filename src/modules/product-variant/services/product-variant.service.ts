@@ -27,11 +27,11 @@ import {
     ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { CreateProductVariantDto } from './dto/create-product-variant.dto';
-import { UpdateProductVariantDto } from './dto/update-product-variant.dto';
+import { CreateProductVariantDto } from '../dto/create-product-variant.dto';
+import { UpdateProductVariantDto } from '../dto/update-product-variant.dto';
 import { Prisma, Role } from '@prisma/client';
 import type { JwtUser } from 'src/auth/types/jwt-user.type';
-import { GenerateProductVariantsDto } from './dto/generate-product-variants.dto';
+import { GenerateProductVariantsDto } from '../dto/generate-product-variants.dto';
 
 @Injectable()
 export class ProductVariantService {

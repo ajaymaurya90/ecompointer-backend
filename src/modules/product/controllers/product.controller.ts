@@ -12,6 +12,7 @@
  *
  * Routes:
  * POST    /products                    → Create product
+ * GET     /products/suggest-code       → Suggest next product code
  * GET     /products/order-search       → Lightweight variant search for order create
  * GET     /products/:id                → Get single product (with relations)
  * GET     /products                    → Paginated product list
@@ -31,13 +32,13 @@ import {
     Delete,
     UseGuards,
 } from '@nestjs/common';
-import { ProductService } from './product.service';
-import { CreateProductDto } from './dto/create-product.dto';
-import { UpdateProductDto } from './dto/update-product.dto';
+import { ProductService } from '../services/product.service';
+import { CreateProductDto } from '../dto/create-product.dto';
+import { UpdateProductDto } from '../dto/update-product.dto';
 import { ApiTags } from '@nestjs/swagger';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { JwtGuard } from 'src/auth/jwt.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { Roles } from 'src/auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
 import type { JwtUser } from 'src/auth/types/jwt-user.type';
@@ -58,6 +59,15 @@ export class ProductController {
         @CurrentUser() user: JwtUser,
     ) {
         return this.service.create(dto, user);
+    }
+
+    /* =============================
+       SUGGEST PRODUCT CODE
+       ============================= */
+    @Roles(Role.BRAND_OWNER)
+    @Get('suggest-code')
+    suggestCode(@CurrentUser() user: JwtUser) {
+        return this.service.suggestNextProductCode(user);
     }
 
     /* =============================

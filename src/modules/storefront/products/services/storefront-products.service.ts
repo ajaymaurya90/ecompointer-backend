@@ -3,10 +3,25 @@ import {
     Injectable,
     NotFoundException,
 } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
 import { Prisma } from '@prisma/client';
+import { PrismaService } from 'src/prisma/prisma.service';
 import { StorefrontProductQueryDto } from '../dto/storefront-product-query.dto';
 
+/**
+ * ---------------------------------------------------------
+ * STOREFRONT PRODUCTS SERVICE
+ * ---------------------------------------------------------
+ * Purpose:
+ * Provides public storefront-safe product listing and
+ * detail data for an active Brand Owner storefront.
+ *
+ * Notes:
+ * - Only active storefront products are returned
+ * - Only active variants are considered
+ * - Supports search, pagination, and category filtering
+ * - Parent category filtering includes direct child categories
+ * ---------------------------------------------------------
+ */
 @Injectable()
 export class StorefrontProductsService {
     constructor(private readonly prisma: PrismaService) { }
@@ -18,7 +33,7 @@ export class StorefrontProductsService {
         brandOwnerId: string,
         query: StorefrontProductQueryDto,
     ) {
-        // Ensure the brand owner exists and storefront can be queried.
+        // Ensure the Brand Owner exists and storefront can be queried.
         await this.assertBrandOwnerStorefrontAvailable(brandOwnerId);
 
         const page = query.page ?? 1;
@@ -56,9 +71,44 @@ export class StorefrontProductsService {
             ];
         }
 
-        // Apply category filter when a category is selected.
+        // Apply category filter.
+        // When a parent category is selected, include products from:
+        // 1. the selected category itself
+        // 2. its active direct child categories
         if (query.categoryId) {
-            where.categoryId = query.categoryId;
+            const selectedCategory = await this.prisma.productCategory.findFirst({
+                where: {
+                    id: query.categoryId,
+                    brandOwnerId,
+                    isActive: true,
+                },
+                select: {
+                    id: true,
+                    children: {
+                        where: {
+                            isActive: true,
+                        },
+                        select: {
+                            id: true,
+                        },
+                    },
+                },
+            });
+
+            // Stop when selected category does not belong to this storefront.
+            if (!selectedCategory) {
+                throw new NotFoundException('Storefront category not found');
+            }
+
+            // Build inclusive category filter list for parent + direct children.
+            const categoryIds = [
+                selectedCategory.id,
+                ...selectedCategory.children.map((child) => child.id),
+            ];
+
+            where.categoryId = {
+                in: categoryIds,
+            };
         }
 
         // Load paginated storefront product records and total count together.
@@ -207,7 +257,7 @@ export class StorefrontProductsService {
         brandOwnerId: string,
         productId: string,
     ) {
-        // Ensure the brand owner exists and storefront can be queried.
+        // Ensure the Brand Owner exists and storefront can be queried.
         await this.assertBrandOwnerStorefrontAvailable(brandOwnerId);
 
         // Load one active product with storefront-safe relations and variants.
