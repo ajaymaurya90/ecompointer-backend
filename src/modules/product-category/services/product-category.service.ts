@@ -207,6 +207,7 @@ export class ProductCategoryService {
             name: true,
             productCode: true,
             description: true,
+            categoryId: true,
             brand: {
               select: {
                 id: true,
@@ -235,6 +236,7 @@ export class ProductCategoryService {
         0,
       ),
       variantCount: item.product.variants.length,
+      isPrimaryCategory: item.product.categoryId === category.id,
     }));
 
     return {
@@ -253,8 +255,8 @@ export class ProductCategoryService {
   }
 
   /* =====================================================
-     FIND ASSIGNABLE PRODUCTS
-     ===================================================== */
+    FIND ASSIGNABLE PRODUCTS
+    ===================================================== */
   async findAssignableProducts(
     categoryId: string,
     user: JwtUser,
@@ -278,11 +280,16 @@ export class ProductCategoryService {
 
     const trimmedSearch = search?.trim();
 
-    // Search products for multiselect assignment UI. No pagination by design.
+    // Return only products that are NOT already assigned to this category.
     const products = await this.prisma.product.findMany({
       where: {
         brandOwnerId: category.brandOwnerId,
         isActive: true,
+        categoryAssignments: {
+          none: {
+            categoryId: category.id,
+          },
+        },
         ...(trimmedSearch
           ? {
             OR: [
@@ -314,39 +321,20 @@ export class ProductCategoryService {
             name: true,
           },
         },
-        categoryAssignments: {
-          select: {
-            categoryId: true,
-          },
-        },
       },
     });
-
-    const data = products
-      .map((product) => {
-        const assignedCategoryIds = product.categoryAssignments.map(
-          (item) => item.categoryId,
-        );
-
-        return {
-          id: product.id,
-          name: product.name,
-          productCode: product.productCode,
-          brand: product.brand,
-          alreadyAssignedToThisCategory: assignedCategoryIds.includes(
-            category.id,
-          ),
-        };
-      })
-      // Do not return products already assigned to the selected category.
-      .filter((product) => !product.alreadyAssignedToThisCategory);
 
     return {
       category: {
         id: category.id,
         name: category.name,
       },
-      data,
+      data: products.map((product) => ({
+        id: product.id,
+        name: product.name,
+        productCode: product.productCode,
+        brand: product.brand,
+      })),
     };
   }
 
@@ -417,8 +405,8 @@ export class ProductCategoryService {
   }
 
   /* =====================================================
-     REMOVE PRODUCT ASSIGNMENT FROM CATEGORY
-     ===================================================== */
+   REMOVE PRODUCT ASSIGNMENT FROM CATEGORY
+   ===================================================== */
   async removeProductAssignment(
     categoryId: string,
     productId: string,
@@ -440,7 +428,7 @@ export class ProductCategoryService {
 
     await this.validateCategoryOwnership(category.brandOwnerId, user, true);
 
-    const product = await this.prisma.product.findFirst({
+    let product = await this.prisma.product.findFirst({
       where: {
         id: productId,
         brandOwnerId: category.brandOwnerId,
@@ -461,17 +449,64 @@ export class ProductCategoryService {
       throw new NotFoundException('Product not found');
     }
 
+    // Self-heal legacy/inconsistent data:
+    // ensure the primary category always exists in assignment table.
+    const hasPrimaryAssignment = product.categoryAssignments.some(
+      (assignment) => assignment.categoryId === product!.categoryId,
+    );
+
+    if (product.categoryId && !hasPrimaryAssignment) {
+      await this.prisma.productCategoryAssignment.create({
+        data: {
+          productId: product.id,
+          categoryId: product.categoryId,
+        },
+      });
+
+      // Reload fresh assignment state after repair.
+      product = await this.prisma.product.findFirst({
+        where: {
+          id: productId,
+          brandOwnerId: category.brandOwnerId,
+          isActive: true,
+        },
+        select: {
+          id: true,
+          categoryId: true,
+          categoryAssignments: {
+            select: {
+              categoryId: true,
+            },
+          },
+        },
+      });
+
+      if (!product) {
+        throw new NotFoundException('Product not found');
+      }
+    }
+
     const assignmentCount = product.categoryAssignments.length;
     const isPrimaryCategory = product.categoryId === categoryId;
+    const hasRequestedAssignment = product.categoryAssignments.some(
+      (assignment) => assignment.categoryId === categoryId,
+    );
 
-    // Prevent removing the last category assignment.
+    // Stop when the requested category is not actually assigned.
+    if (!hasRequestedAssignment) {
+      throw new BadRequestException(
+        'Product is not assigned to this category',
+      );
+    }
+
+    // Prevent removing the last category assignment from a product.
     if (assignmentCount <= 1) {
       throw new BadRequestException(
         'Cannot remove the last category assignment from a product',
       );
     }
 
-    // Prevent removing current primary category from category page.
+    // Prevent removing the current primary category from category page.
     if (isPrimaryCategory) {
       throw new BadRequestException(
         'Cannot remove the primary category assignment from category page. Please change the primary category from product edit page first.',

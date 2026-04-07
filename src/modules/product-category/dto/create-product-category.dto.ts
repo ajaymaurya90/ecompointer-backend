@@ -20,14 +20,7 @@ export class CreateProductCategoryDto {
         description: 'Name of the product category',
     })
     @IsString()
-    name: string;
-
-    /*@ApiProperty({
-        example: '660e8400-e29b-41d4-a716-446655440000',
-        description: 'UUID of the brand this category belongs to',
-    })
-    @IsUUID()
-    brandOwnerId: string; */
+    name!: string;
 
     @ApiPropertyOptional({
         example: '660e8400-e29b-41d4-a716-446655440111',

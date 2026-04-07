@@ -97,7 +97,7 @@ export class ProductCategoryController {
        REMOVE PRODUCT ASSIGNMENT FROM CATEGORY
        ===================================================== */
     @Roles(Role.BRAND_OWNER)
-    @Delete(':id/products/:productId')
+    @Delete(':id/assigned-products/:productId')
     removeAssignedProduct(
         @Param('id', new ParseUUIDPipe()) id: string,
         @Param('productId', new ParseUUIDPipe()) productId: string,
